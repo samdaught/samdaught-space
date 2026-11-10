@@ -87,7 +87,6 @@ onMounted(async () => {
         </p>
         <template v-if="session?.can_manage_catalog">
           <RouterLink to="/admin/archive/entries"><NavIcon name="quill" />Записи архива</RouterLink>
-          <RouterLink to="/admin/content-sources"><NavIcon name="book" />Источники</RouterLink>
         </template>
         <RouterLink v-if="session?.can_manage_news" to="/admin/news"
           ><NavIcon name="news" />Новости сайта</RouterLink
@@ -109,6 +108,7 @@ onMounted(async () => {
     <div class="app-main">
       <main id="page-content" class="app-content page-content" tabindex="-1"><RouterView /></main>
       <footer class="app-footer">
+        <RouterLink to="/legal">Правовая информация</RouterLink>
         <span
           >© {{ new Date().getFullYear() }}
           <RouterLink to="/help#contact">Связь с администратором</RouterLink></span

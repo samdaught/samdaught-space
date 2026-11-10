@@ -89,6 +89,9 @@ class CatalogEntryApiController extends ApiController
                     'item-options' => ['GET'],
                     'basic-rule-options' => ['GET'],
                     'creation-rule-options' => ['GET'],
+                    'mechanics-options' => ['GET'],
+                    'rulebook-options' => ['GET'],
+                    'audit' => ['GET'],
                 ],
             ]
         ];
@@ -122,8 +125,10 @@ class CatalogEntryApiController extends ApiController
                 ['category' => CatalogEntryType::tableName()],
                 '[[category.code]] = [[entry.type]]'
             )
+            ->leftJoin(['rulebook'=>'{{%entry_rulebook}}'],'[[rulebook.entry_id]]=[[entry.id]]')
             ->select([
                 'entry.id',
+                'mechanics_status'=>new \yii\db\Expression("CASE WHEN [[rulebook.ready]] THEN 'ready' WHEN [[rulebook.entry_id]] IS NOT NULL THEN 'partial' ELSE 'text' END"),
                 'entry.type',
                 'entry.slug',
                 'entry.title',
@@ -145,7 +150,7 @@ class CatalogEntryApiController extends ApiController
         $offset = ($page - 1) * $perPage;
 
         $entries = $query
-            ->orderBy(['id' => SORT_DESC])
+            ->orderBy(['entry.id' => SORT_DESC])
             ->limit($perPage)
             ->offset($offset)
             ->asArray()
@@ -160,6 +165,12 @@ class CatalogEntryApiController extends ApiController
                 'page_count' => $pageCount,
             ],
         ];
+    }
+
+    public function actionAudit(): array
+    {
+        $report=[];foreach(CatalogEntry::find()->orderBy('id')->each() as $entry)$report[]=(new \app\services\rules\ArchiveReadiness())->inspect($entry);
+        return ['data'=>$report];
     }
 
     public function actionView(int $id): array
@@ -183,6 +194,7 @@ class CatalogEntryApiController extends ApiController
 
         $entry = new CatalogEntry();
         $entry->load($data, '');
+        $entry->revision = 1;
 
         $saved = $this->saveEntry($entry, $data, true);
 
@@ -227,6 +239,9 @@ class CatalogEntryApiController extends ApiController
         if (!is_array($data)) {
             throw new \yii\web\BadRequestHttpException('Неверное тело запроса');
         }
+
+        if (!isset($data['revision']) || !is_int($data['revision']) || $data['revision'] !== $entry->revision) throw new \yii\web\ConflictHttpException('Запись или её связи изменились. Перезагрузите запись перед сохранением.');
+        $entry->revision++;
 
         foreach (['title', 'body', 'source_id'] as $attribute) {
             if (array_key_exists($attribute, $data)) {
@@ -305,6 +320,24 @@ class CatalogEntryApiController extends ApiController
         return ['data' => (new CreationRules())->options($profile)];
     }
 
+    public function actionMechanicsOptions(): array
+    {
+        $id=Yii::$app->request->get('origin_profile_id');
+        $profile=null;
+        if ($id!==null) {
+            $id=filter_var($id,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+            if ($id===false || ($profile=RuleProfile::findOne($id))===null) throw new \yii\web\BadRequestHttpException('Выберите существующий профиль.');
+        }
+        return ['data'=>(new \app\services\rules\EntryMechanics())->options($profile)];
+    }
+
+    public function actionRulebookOptions(): array
+    {
+        $id=Yii::$app->request->get('origin_profile_id');$profile=null;
+        if($id!==null){$id=filter_var($id,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);if($id===false||($profile=RuleProfile::findOne($id))===null)throw new \yii\web\BadRequestHttpException('Выберите существующий профиль.');}
+        return ['data'=>(new \app\services\rules\Rulebook())->options($profile)];
+    }
+
     private function getEntryData(CatalogEntry $entry): array
     {
         $data = $entry->getAttributes([
@@ -348,14 +381,17 @@ class CatalogEntryApiController extends ApiController
             $data['class_saving_throw_codes'] = ClassSavingThrowProficiency::find()->select('ability_code')
                 ->where(['class_entry_id' => $entry->id])->orderBy('ability_code')->column();
         }
+        $data['revision'] = $entry->revision;
+        $data['rulebook'] = (new \app\services\rules\Rulebook())->read($entry->id);
+        $data['mechanics'] = (new \app\services\rules\EntryMechanics())->read($entry);
         return $data;
     }
 
     private function saveEntry(CatalogEntry $entry, array $data, bool $creating): bool
     {
-        return Yii::$app->db->transaction(function () use ($entry, $data, $creating): bool {
+        try{return Yii::$app->db->transaction(function () use ($entry, $data, $creating): bool {
             return $this->validateAndSaveEntry($entry, $data, $creating);
-        });
+        });}catch(\InvalidArgumentException $error){$entry->addError('rulebook',$error->getMessage());return false;}
     }
 
     private function validateAndSaveEntry(CatalogEntry $entry, array $data, bool $creating): bool
@@ -571,6 +607,18 @@ class CatalogEntryApiController extends ApiController
             if (!$creationForm->validate()) { $entry->addErrors($creationForm->getErrors()); $valid = false; }
         } elseif ($hasCreationRules) { $entry->addError('creation_rules', 'Эта категория не может задавать выдачи при создании.'); $valid = false; }
 
+        $rulebook = null;
+        if (array_key_exists('rulebook',$data) || $creating && in_array($entry->type,['subclass','species_variant'],true)) {
+            try { $rulebook=(new \app\services\rules\Rulebook())->validate($entry,$data['rulebook']??[]); }
+            catch (\InvalidArgumentException $error) { $entry->addError('rulebook',$error->getMessage()); $valid=false; }
+        }
+        $mechanics = null;
+        if (array_key_exists('mechanics',$data)) {
+            try { $mechanics=(new \app\services\rules\EntryMechanics())->validate($entry,$data['mechanics']); }
+            catch (\InvalidArgumentException $error) { $entry->addError('mechanics',$error->getMessage()); $valid=false; }
+        } elseif ($creating && in_array($entry->type,['spell','class'],true)) {
+            $entry->addError('mechanics','Заполните механику заклинания или заклинательство класса.'); $valid=false;
+        }
         if (!$valid) {
             return false;
         }
@@ -612,6 +660,8 @@ class CatalogEntryApiController extends ApiController
             (new ClassSkillsWriter())->save($entry, $classSkillsForm->class_skill_choice_count, $classSkillsForm->class_skill_entry_ids);
         }
         if ($creationForm !== null) (new CreationRules())->save($entry, $creationForm->creation_rules);
+        if ($mechanics !== null) (new \app\services\rules\EntryMechanics())->save($entry,$mechanics);
+        if ($rulebook !== null) (new \app\services\rules\Rulebook())->save($entry,$rulebook);
         return true;
     }
 

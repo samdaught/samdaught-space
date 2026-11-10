@@ -56,6 +56,8 @@ export function emptyCharacterDraft(): CharacterEditorDraft {
     name: '',
     rule_profile_id: null,
     target_level: 1,
+    subclass_entry_id: null,
+    species_variant_entry_id: null,
     species_entry_id: null,
     class_entry_id: null,
     background_entry_id: null,
@@ -64,6 +66,9 @@ export function emptyCharacterDraft(): CharacterEditorDraft {
     background_choices: { tool_entry_id: null, equipment_choice: null },
     class_skill_entry_ids: [],
     inventory_items: [],
+    starting_equipped_ids: [],
+    equipment_choices: {},
+    rule_choices: {},
     creation_choices: {},
     sheet_details: {
       armor_class: null,
@@ -85,6 +90,8 @@ export function editorContext(draft: CharacterContext): CharacterContext {
   return {
     rule_profile_id: draft.rule_profile_id,
     target_level: draft.target_level,
+    subclass_entry_id: draft.subclass_entry_id ?? null,
+    species_variant_entry_id: draft.species_variant_entry_id ?? null,
     species_entry_id: draft.species_entry_id,
     class_entry_id: draft.class_entry_id,
     background_entry_id: draft.background_entry_id,
@@ -132,6 +139,11 @@ export function getCharacterEditorInput(
     },
     class_skill_entry_ids: [...draft.class_skill_entry_ids],
     inventory_items: items,
+    equipment_choices: { ...draft.equipment_choices },
+    starting_equipped_ids: [...draft.starting_equipped_ids],
+    rule_choices: Object.fromEntries(
+      Object.entries(draft.rule_choices).filter(([, values]) => values.length > 0),
+    ),
     creation_choices: Object.fromEntries(
       Object.entries(draft.creation_choices)
         .filter(([, ids]) => ids.length > 0)
@@ -199,6 +211,9 @@ export async function getCharacterEditorOptions(
   context: CharacterContext,
   choices: Record<string, number[]> = {},
   classSkillIds: number[] = [],
+  ruleChoices: Record<string, string[]> = {},
+  baseScores: Record<string, number | null> = {},
+  increases: Record<string, number> = {},
 ): Promise<CharacterEditorOptions> {
   const normalized = editorContext(context)
   if (normalized.target_level === '') normalized.target_level = 1
@@ -209,6 +224,9 @@ export async function getCharacterEditorOptions(
       credentials: 'same-origin',
       body: JSON.stringify({
         context: normalized,
+        rule_choices: ruleChoices,
+        base_scores: baseScores,
+        background_increases: increases,
         creation_choices: choices,
         class_skill_entry_ids: classSkillIds,
       }),
@@ -220,7 +238,6 @@ export async function saveCharacterEditor(
   id: number | null,
   input: CharacterEditorInput,
 ): Promise<CharacterEditorState> {
-
   return readResponse(
     await fetch(id === null ? '/api/v1/characters' : `/api/v1/characters/${id}`, {
       method: id === null ? 'POST' : 'PATCH',
@@ -247,6 +264,8 @@ export async function saveCharacterEditor(
           }),
         ),
         creation_choices: input.creation_choices,
+        equipment_choices: input.equipment_choices,
+        starting_equipped_ids: input.starting_equipped_ids,
         sheet_details: {
           armor_class: input.sheet_details.armor_class,
           speed_feet: input.sheet_details.speed_feet,

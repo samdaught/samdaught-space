@@ -110,8 +110,10 @@ class CharacterApiController extends ApiController
     {
         return $this->editorResponse(function (): array {
             $data = Yii::$app->request->getBodyParams();
-            if (!is_array($data) || count($data) !== 3 || array_diff(['context', 'creation_choices', 'class_skill_entry_ids'], array_keys($data)) || !is_array($data['context']) || array_diff(array_keys($data['context']), \app\services\characters\CharacterEditor::CONTEXT_FIELDS)) throw new \yii\web\BadRequestHttpException('Передайте контекст и локальные выборы редактора.');
-            return (new \app\services\characters\CharacterEditor())->options($data['context'], Yii::$app->user->id, $data['creation_choices'], $data['class_skill_entry_ids']);
+            if (is_array($data))$data=array_replace(['rule_choices'=>[],'base_scores'=>null,'background_increases'=>null],$data);
+            if (!is_array($data) || count($data) !== 6 || array_diff(['context', 'creation_choices', 'class_skill_entry_ids'], array_keys($data)) || !is_array($data['context']) || array_diff(array_keys($data['context']), \app\services\characters\CharacterEditor::CONTEXT_FIELDS)) throw new \yii\web\BadRequestHttpException('Передайте контекст и локальные выборы редактора.');
+            foreach(['rule_choices','base_scores','background_increases'] as $field)if($data[$field]!==null&&!is_array($data[$field]))throw new \yii\web\BadRequestHttpException('Передайте массив значений редактора.');
+            return (new \app\services\characters\CharacterEditor())->options($data['context'], Yii::$app->user->id, $data['creation_choices'], $data['class_skill_entry_ids'], $data['rule_choices'], $data['base_scores'], $data['background_increases']);
         });
     }
 

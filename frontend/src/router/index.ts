@@ -3,10 +3,12 @@ import HomeView from '../views/HomeView.vue'
 import ArchiveView from '../views/ArchiveView.vue'
 import ArchiveEntryView from '../views/ArchiveEntryView.vue'
 import HelpView from '../views/HelpView.vue'
+import LegalView from '../views/LegalView.vue'
 import ContentSourcesView from '../views/admin/ContentSourcesView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 import ArchiveEntryCreateView from '../views/admin/ArchiveEntryCreateView.vue'
 import ArchiveEntriesView from '../views/admin/ArchiveEntriesView.vue'
+import ArchiveManagementView from '../views/admin/ArchiveManagementView.vue'
 import ArchiveEntryEditView from '../views/admin/ArchiveEntryEditView.vue'
 import CharacterEditorView from '../views/characters/CharacterEditorView.vue'
 import CharacterSheetView from '../views/characters/CharacterSheetView.vue'
@@ -23,7 +25,13 @@ export const router = createRouter({
   history: createWebHistory('/'),
   scrollBehavior(to, _from, savedPosition) {
     if (savedPosition) return savedPosition
-    if (to.hash) return { el: to.hash }
+    if (to.hash) {
+      const target = document.getElementById(to.hash.slice(1))
+      if (target) {
+        const top = Number.parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0
+        return { el: target, top }
+      }
+    }
     return { top: 0 }
   },
   routes: [
@@ -55,6 +63,7 @@ export const router = createRouter({
     { path: '/archive', component: ArchiveView },
     { path: '/archive/:id', component: ArchiveEntryView },
     { path: '/help', component: HelpView },
+    { path: '/legal', component: LegalView },
     { path: '/news/:id', component: NewsView },
     {
       path: '/admin/news',
@@ -79,13 +88,17 @@ export const router = createRouter({
     { path: '/:pathMatch(.*)*', component: NotFoundView },
     {
       path: '/admin/content-sources',
-      component: ContentSourcesView,
+      redirect: '/admin/archive/entries/sources',
       meta: { requiresAuth: true, manageCatalog: true },
     },
     {
       path: '/admin/archive/entries',
-      component: ArchiveEntriesView,
+      component: ArchiveManagementView,
       meta: { requiresAuth: true, manageCatalog: true },
+      children: [
+        { path: '', component: ArchiveEntriesView },
+        { path: 'sources', component: ContentSourcesView },
+      ],
     },
     {
       path: '/admin/archive/entries/new',
@@ -136,6 +149,7 @@ router.afterEach((to, _from, failure) => {
     '/': 'Главная',
     '/archive': 'Архив',
     '/help': 'Справка',
+    '/legal': 'Правовая информация',
     '/login': 'Вход',
     '/signup': 'Регистрация',
     '/cabinet': 'Мои персонажи',
@@ -147,6 +161,7 @@ router.afterEach((to, _from, failure) => {
     '/admin/archive/entries': 'Записи архива',
     '/admin/archive/entries/new': 'Новая запись',
     '/admin/content-sources': 'Источники',
+    '/admin/archive/entries/sources': 'Источники — Записи архива',
     '/access-denied': 'Нет доступа',
   }
   document.title =

@@ -132,6 +132,10 @@ $config = [
                 'PATCH api/v1/catalog-entries/<id:\d+>/availability/<profileId:\d+>' => 'catalog/profile-availability-api/update',
                 'GET api/v1/archive/entries' => 'catalog/archive-api/index',
 
+                'GET api/v1/catalog-audit' => 'catalog/catalog-entry-api/audit',
+                'GET api/v1/rulebook/options' => 'catalog/catalog-entry-api/rulebook-options',
+                'GET api/v1/entry-mechanics/options' => 'catalog/catalog-entry-api/mechanics-options',
+
                 'GET api/v1/rule-profiles' => 'rules/rule-profile-api/index',
 
                 'POST api/v1/character-editor/options' => 'characters/character-api/editor-options',

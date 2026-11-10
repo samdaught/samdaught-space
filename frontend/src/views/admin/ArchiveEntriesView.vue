@@ -7,6 +7,23 @@ import {
   type CatalogEntryListItem,
 } from '../../api/catalogEntries'
 
+const audit = ref<{ id: number; title: string; complete: boolean; issues: string[] }[] | null>(
+    null,
+  ),
+  auditing = ref(false)
+async function auditArchive() {
+  auditing.value = true
+  error.value = ''
+  try {
+    const response = await fetch('/api/v1/catalog-audit', { credentials: 'same-origin' })
+    if (!response.ok) throw new Error('Не удалось проверить архив')
+    audit.value = (await response.json()).data
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'Ошибка проверки'
+  } finally {
+    auditing.value = false
+  }
+}
 const entriesPage = ref<CatalogEntriesResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -64,13 +81,30 @@ onMounted(async () => {
 
 <template>
   <header class="page-heading">
-    <h1>Записи архива</h1>
+    <h2>Записи</h2>
 
     <RouterLink class="button button-primary" to="/admin/archive/entries/new"
       >Создать запись</RouterLink
     >
   </header>
 
+  <button type="button" :disabled="auditing" @click="auditArchive">
+    {{ auditing ? 'Проверяем…' : 'Проверить готовность архива' }}
+  </button>
+  <section v-if="audit">
+    <h3>Проверка механики</h3>
+    <p>
+      Проверено: {{ audit.length }}. Требуют заполнения:
+      {{ audit.filter((row) => !row.complete).length }}.
+    </p>
+    <details v-for="row in audit.filter((row) => !row.complete)" :key="row.id">
+      <summary>{{ row.title }}</summary>
+      <ul>
+        <li v-for="issue in row.issues" :key="issue">{{ issue }}</li>
+      </ul>
+      <RouterLink :to="'/admin/archive/entries/' + row.id + '/edit'">Исправить запись</RouterLink>
+    </details>
+  </section>
   <p v-if="loading">Загружаем записи…</p>
   <p v-if="error" role="alert">{{ error }}</p>
 
@@ -84,6 +118,7 @@ onMounted(async () => {
             <th scope="col">Название</th>
             <th scope="col">Категория</th>
             <th scope="col">Статус</th>
+            <th scope="col">Механика</th>
             <th scope="col">Действия</th>
           </tr>
         </thead>
@@ -93,6 +128,15 @@ onMounted(async () => {
             <td>{{ entry.title }}</td>
             <td>{{ entry.type_title }}</td>
             <td>{{ entry.is_published ? 'Опубликовано' : 'Черновик' }}</td>
+            <td>
+              {{
+                entry.mechanics_status === 'ready'
+                  ? 'Заполнена'
+                  : entry.mechanics_status === 'partial'
+                    ? 'Частично'
+                    : 'Только текст'
+              }}
+            </td>
             <td>
               <RouterLink :to="'/admin/archive/entries/' + entry.id + '/edit'">
                 Редактировать

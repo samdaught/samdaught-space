@@ -17,9 +17,9 @@ use yii\db\{Query, JsonExpression};
 
 class CharacterEditor
 {
-    public const CONTEXT_FIELDS = ['rule_profile_id', 'target_level', 'species_entry_id', 'class_entry_id', 'background_entry_id'];
+    public const CONTEXT_FIELDS = ['rule_profile_id', 'target_level', 'species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id'];
     private const INPUT_FIELDS = ['revision', 'name', 'rule_profile_id', 'target_level', 'species_entry_id', 'class_entry_id',
-        'background_entry_id', 'base_scores', 'background_increases', 'background_choices', 'class_skill_entry_ids', 'inventory_items', 'creation_choices', 'sheet_details', 'finish'];
+        'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id', 'rule_choices', 'base_scores', 'background_increases', 'background_choices', 'class_skill_entry_ids', 'inventory_items', 'creation_choices', 'equipment_choices', 'starting_equipped_ids', 'sheet_details', 'finish'];
 
     public function read(int $id, int $userId): array
     {
@@ -35,10 +35,13 @@ class CharacterEditor
         });
     }
 
-    public function options(array $context, int $userId, $choices = [], $classSkillIds = []): array
+    public function options(array $context, int $userId, $choices = [], $classSkillIds = [], $ruleChoices = [], ?array $scores = null, ?array $increases = null): array
     {
-        return Yii::$app->db->transaction(function () use ($context, $userId, $choices, $classSkillIds): array {
+        return Yii::$app->db->transaction(function () use ($context, $userId, $choices, $classSkillIds, $ruleChoices, $scores, $increases): array {
             $character = new Character();
+            $character->rule_choices = $ruleChoices;
+            $character->ruleContextScores = $scores;
+            $character->ruleContextIncreases = $increases;
             $character->user_id = $userId;
             $character->name = 'Новый персонаж';
             $character->status = Character::STATUS_DRAFT;
@@ -52,6 +55,7 @@ class CharacterEditor
             elseif ($character->species_entry_id !== null || $character->class_entry_id !== null || $character->background_entry_id !== null) {
                 throw new CharacterEditorValidationException(['rule_profile_id' => ['Сначала выберите мир и правила.']]);
             }
+            $attributes=array_merge($attributes,['subclass_entry_id','species_variant_entry_id']);
             if (!$character->validate($attributes)) throw new CharacterEditorValidationException($character->getErrors());
             return $this->sections($character, $choices, $classSkillIds);
         });
@@ -59,6 +63,11 @@ class CharacterEditor
 
     public function save(array $data, int $userId, ?int $id): array
     {
+        $data['rule_choices'] ??= [];
+        $data['subclass_entry_id'] ??= null;
+        $data['species_variant_entry_id'] ??= null;
+        $data['equipment_choices'] ??= [];
+        $data['starting_equipped_ids'] ??= [];
         if (count($data) !== count(self::INPUT_FIELDS) || array_diff(self::INPUT_FIELDS, array_keys($data))) {
             throw new BadRequestHttpException('Передайте все поля единого редактора без дополнительных полей.');
         }
@@ -81,6 +90,7 @@ class CharacterEditor
             $this->lockEntries($character);
             if (!$character->validate()) throw new CharacterEditorValidationException($character->getErrors());
 
+            $character->rule_choices = $data['rule_choices'];
             $context = clone $character;
             $context->id = null;
             $rules = $this->sections($context);
@@ -114,6 +124,7 @@ class CharacterEditor
             $skills->allowedIds = array_column($rules['class_skills']['options'], 'id');
             $skills->choiceCount = $rules['class_skills']['configured'] ? $rules['class_skills']['choice_count'] : 0;
             $this->collectErrors($skills, $errors);
+            if (is_array($skills->skill_entry_ids) && array_intersect($skills->skill_entry_ids,array_column($benefits['skills'],'id'))) $errors['class_skill_entry_ids']=['Выберите навыки класса, которые ещё не даёт предыстория.'];
             $inventory = new CharacterInventoryForm(); $inventory->items = $data['inventory_items'];
             $inventory->profile = RuleProfile::findOne($character->rule_profile_id);
             $inventory->ownedRows = $id === null ? [] : CharacterItem::find()->where(['character_id' => $id, 'source_kind' => CharacterItem::SOURCE_DRAFT])->indexBy('id')->all();
@@ -121,8 +132,12 @@ class CharacterEditor
             $details = new SheetDetailsForm(); $details->details = $data['sheet_details'];
             $this->collectErrors($details, $errors);
             if (!is_array($data['creation_choices'])) $errors['creation_choices'] = ['Передайте объект групп выбора. Для пустого выбора используйте пустой объект.'];
+            $context->ruleContextScores = $scores->hasErrors()?[]:$scores->base_scores;
+            $context->ruleContextIncreases = $increases->hasErrors()?[]:$increases->increases;
             $creation = (new CreationBenefits())->get($context, is_array($data['creation_choices']) ? $data['creation_choices'] : [], array_merge(array_column($benefits['skills'], 'id'), $skills->hasErrors() ? [] : $skills->skill_entry_ids), $benefits);
             if ($creation['validation_errors']) $errors['creation_choices'] = $creation['validation_errors'];
+            $packages=(new StartingPackages())->get($context,$creation,$data['equipment_choices']);
+            if ($packages['validation_errors']) $errors['equipment_choices']=$packages['validation_errors'];
             if ($errors) throw new CharacterEditorValidationException($errors);
 
             $character->revision = $data['revision'] + 1;
@@ -149,13 +164,19 @@ class CharacterEditor
             $db = Yii::$app->db;
             $db->createCommand()->delete('{{%character_creation_choice}}', ['character_id' => $character->id])->execute();
             foreach ($creation['selections'] as $key => $ids) {
-                [$sourceId, $code] = explode(':', $key, 2);
-                foreach ($ids as $entryId) $db->createCommand()->insert('{{%character_creation_choice}}', ['character_id' => $character->id, 'source_entry_id' => (int) $sourceId, 'code' => $code, 'entry_id' => $entryId])->execute();
+                [$sourcePart, $code] = explode(':', $key, 2);
+                [$sourceId,$instanceKey]=array_pad(explode('~',$sourcePart,2),2,'root');
+                foreach ($ids as $entryId) $db->createCommand()->insert('{{%character_creation_choice}}', ['character_id' => $character->id, 'source_entry_id' => (int) $sourceId, 'instance_key'=>$instanceKey, 'code' => $code, 'entry_id' => $entryId])->execute();
             }
+            $db->createCommand()->delete('{{%character_rule_choice}}',['character_id'=>$character->id])->execute();
+            $db->createCommand()->delete('{{%character_rule_instance}}',['character_id'=>$character->id])->execute();
+            foreach($creation['instances'] as $key=>$instance){$db->createCommand()->insert('{{%character_rule_instance}}',['character_id'=>$character->id]+$instance)->execute();foreach($creation['rule_selections'] as $group=>$values)if(str_starts_with($group,$key.':'))foreach($values as $value)$db->createCommand()->insert('{{%character_rule_choice}}',['character_id'=>$character->id,'source_entry_id'=>$instance['source_entry_id'],'instance_key'=>$instance['instance_key'],'code'=>substr($group,strlen((string)$key)+1),'value'=>$value])->execute();}
             $normalized = $details->details;
             foreach ($normalized as &$value) if (is_string($value)) $value = trim($value);
             unset($value);
             $db->createCommand()->upsert('{{%character_sheet_details}}', ['character_id' => $character->id, 'data' => new JsonExpression($normalized)])->execute();
+            (new StartingPackages())->save($character,$packages['selections']);
+            (new StartingEquipmentWriter())->save($character,$data['starting_equipped_ids']);
             $state = $this->snapshot($character);
             if ($data['finish']) {
                 if (!$state['readiness']['complete']) throw new CharacterEditorValidationException(['finish' => $state['readiness']['issues']]);
@@ -176,7 +197,7 @@ class CharacterEditor
             $character = $this->findOwned($id, $userId, true);
             if ($character->revision !== $revision) throw new ConflictHttpException('Лист уже изменён. Загрузите актуальные данные перед удалением.');
             $db = Yii::$app->db;
-            foreach (['character_sheet_snapshot', 'character_sheet_details', 'character_creation_choice', 'character_item', 'character_inventory_state', 'character_class_skill', 'character_class_skill_choice', 'character_background_choice', 'character_ability_score'] as $table) $db->createCommand()->delete('{{%' . $table . '}}', ['character_id' => $id])->execute();
+            foreach (['character_rule_choice','character_rule_instance','character_equipment_package','character_sheet_snapshot', 'character_sheet_details', 'character_creation_choice', 'character_item', 'character_inventory_state', 'character_class_skill', 'character_class_skill_choice', 'character_background_choice', 'character_ability_score'] as $table) $db->createCommand()->delete('{{%' . $table . '}}', ['character_id' => $id])->execute();
             $sources = CharacterAbilityIncreaseSource::find()->select('id')->where(['character_id' => $id])->column();
             CharacterAbilityIncrease::deleteAll(['source_id' => $sources]);
             CharacterAbilityIncreaseSource::deleteAll(['character_id' => $id]);
@@ -187,7 +208,7 @@ class CharacterEditor
     private function snapshot(Character $character): array
     {
         $state = $this->sections($character);
-        $state['character'] = $character->getAttributes(['id', 'name', 'user_id', 'rule_profile_id', 'target_level', 'species_entry_id', 'class_entry_id', 'background_entry_id', 'status', 'revision', 'finished_at']);
+        $state['character'] = $character->getAttributes(['id', 'name', 'user_id', 'rule_profile_id', 'target_level', 'species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id', 'status', 'revision', 'finished_at']);
         $state['sheet_basics'] = (new FirstLevelCharacterSheet())->get($character, $state['creation']);
         $state['sheet_details'] = array_replace(SheetDetailsForm::defaults(), array_intersect_key($this->jsonData('character_sheet_details', $character->id) ?? [], SheetDetailsForm::defaults()));
         $issues = [];
@@ -197,7 +218,10 @@ class CharacterEditor
         if (!$state['creation']['complete']) $issues = array_merge($issues, ['Завершите все архивные выдачи и группы выбора вида, класса и черт.'], $state['creation']['issues']);
         if (!$state['inventory']['manual_items_valid']) $issues[] = 'В ручном инвентаре есть недоступные предметы.';
         if ($state['sheet_basics']['hit_point_max'] === null) $issues[] = 'Не удалось рассчитать положительный максимум хитов. Проверьте класс, Телосложение и архивные бонусы.';
-        foreach (['armor_class' => 'КД', 'size' => 'размер', 'languages' => 'языки'] as $key => $label) if ($state['sheet_details'][$key] === null || $state['sheet_details'][$key] === '') $issues[] = 'Заполните ' . $label . ' в полях листа.';
+        if (!$state['starting_packages']['complete']) $issues=array_merge($issues,$state['starting_packages']['issues']);
+        if (!$state['sheet_basics']['equipment_valid']) $issues[]='Исправьте экипировку доспехов и щитов.';
+        if ($state['sheet_basics']['armor_class']!==null && $state['sheet_basics']['armor_class']<1) $issues[]='Расчётная КД должна быть положительной. Проверьте бонусы и экипировку.';
+        foreach (['armor_class' => 'КД', 'size' => 'размер', 'languages' => 'языки'] as $key => $label) if ($state['sheet_basics'][$key] === null || $state['sheet_basics'][$key] === '') $issues[] = 'Заполните ' . $label . ' в полях листа.';
         $state['readiness'] = ['complete' => !$issues, 'issues' => array_values(array_unique($issues))];
         return $state;
     }
@@ -206,29 +230,32 @@ class CharacterEditor
     {
         $profile = RuleProfile::findOne($character->rule_profile_id);
         $origins = [];
-        foreach (['species_entry_id', 'class_entry_id', 'background_entry_id'] as $field) {
+        foreach (['species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id'] as $field) {
             $entry = $character->$field === null ? null : (new \app\services\rules\CreationRules())->findAvailable($character->$field, $profile);
             $origins[$field] = $entry === null ? null : $entry->getAttributes(['id', 'title', 'body']);
         }
-        $options = ['species' => [], 'class' => [], 'background' => []];
+        $options = ['species' => [], 'class' => [], 'background' => [], 'subclass'=>[], 'species_variant'=>[]];
         if ($profile !== null) {
             foreach (CatalogEntry::find()->where(['type' => array_keys($options), 'is_published' => true])->orderBy(['title' => SORT_ASC, 'id' => SORT_ASC])->all() as $entry) {
+                if(in_array($entry->type,['subclass','species_variant'],true)){$table=$entry->type==='subclass'?'subclass_definition':'species_variant_definition';$parent=$entry->type==='subclass'?'class_entry_id':'species_entry_id';$row=(new Query())->from('{{%'.$table.'}}')->where(['catalog_entry_id'=>$entry->id])->one();if(!$row||$row[$parent]!==$character->$parent||$row['selection_level']>$character->target_level)continue;}
                 if ((new CatalogAvailability())->isAvailableInProfile($entry, $profile)) $options[$entry->type][] = $entry->getAttributes(['id', 'title']);
             }
         }
         $benefits = (new CharacterBackgroundBenefits())->get($character);
         $class = (new CharacterClassSkills())->get($character);
         $baseSkills = array_merge(array_column($benefits['skills'], 'id'), $classSkillIds === null ? $class['effective_skill_entry_ids'] : (is_array($classSkillIds) ? array_intersect(array_filter($classSkillIds, 'is_int'), array_column($class['options'], 'id')) : []));
+        $creation=(new CreationBenefits())->get($character,$choices,$baseSkills,$benefits);
         return [
+            'starting_packages'=>(new StartingPackages())->get($character,$creation),
             'context' => $character->getAttributes(self::CONTEXT_FIELDS), 'entry_options' => $options,
             'origins' => $origins, 'profile_title' => $profile?->title,
             'reference' => ['species_speed_feet' => $origins['species_entry_id'] === null ? null : \app\models\rules\SpeciesDefinition::findOne($character->species_entry_id)?->speed_feet,
                 'hit_die_sides' => $origins['class_entry_id'] === null ? null : \app\models\rules\ClassDefinition::findOne($character->class_entry_id)?->hit_die_sides],
-            'ability_scores' => (new AbilityScoreCalculator())->calculate($character),
+            'ability_scores' => (new AbilityScoreCalculator())->calculate($character,$creation),
             'background_abilities' => (new BackgroundAbilityDistribution())->get($character),
             'benefits' => $benefits,
             'class_skills' => $class,
-            'creation' => (new CreationBenefits())->get($character, $choices, $baseSkills, $benefits),
+            'creation' => $creation,
             'inventory' => (new CharacterInventory())->get($character),
         ];
     }
@@ -256,7 +283,7 @@ class CharacterEditor
     private function validateContextTypes(Character $character, bool $allowNoProfile): void
     {
         $errors = [];
-        foreach (['rule_profile_id', 'species_entry_id', 'class_entry_id', 'background_entry_id'] as $field) {
+        foreach (['rule_profile_id', 'species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id'] as $field) {
             $value = $character->$field;
             if ($value === null && ($field !== 'rule_profile_id' || $allowNoProfile)) continue;
             if (!is_int($value) || $value < 1 || $value > 2147483647) $errors[$field] = ['Выберите запись по корректному целому ID.'];

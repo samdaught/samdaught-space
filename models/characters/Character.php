@@ -12,6 +12,8 @@ use yii\db\ActiveRecord;
 
 class Character extends ActiveRecord
 {
+    public ?array $ruleContextScores = null;
+    public ?array $ruleContextIncreases = null;
     public const STATUS_DRAFT = 'draft';
     public const STATUS_READY = 'ready';
     public const ABILITY_METHOD_STANDARD_ARRAY = 'standard_array';
@@ -26,6 +28,8 @@ class Character extends ActiveRecord
         $isMissingValue = static fn($value): bool => $value === null || $value === '';
 
         return [
+            ['subclass_entry_id', 'validateVariant', 'params'=>['type'=>'subclass','table'=>'subclass_definition','parent'=>'class_entry_id']],
+            ['species_variant_entry_id', 'validateVariant', 'params'=>['type'=>'species_variant','table'=>'species_variant_definition','parent'=>'species_entry_id']],
             ['name', 'string', 'max' => 255],
             ['name', 'trim', 'skipOnError' => true],
             ['target_level', 'default', 'value' => 1, 'isEmpty' => $isMissingValue],
@@ -34,8 +38,8 @@ class Character extends ActiveRecord
             [['user_id', 'rule_profile_id', 'name', 'target_level', 'status', 'ability_score_method'], 'required'],
             [['user_id', 'rule_profile_id'], 'integer', 'min' => 1],
             ['revision', 'integer', 'min' => 1, 'max' => 2147483647],
-            [['species_entry_id', 'class_entry_id', 'background_entry_id'], 'default', 'value' => null, 'isEmpty' => $isMissingValue],
-            [['species_entry_id', 'class_entry_id', 'background_entry_id'], 'integer', 'min' => 1, 'isEmpty' => $isMissingValue],
+            [['species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id'], 'default', 'value' => null, 'isEmpty' => $isMissingValue],
+            [['species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id'], 'integer', 'min' => 1, 'isEmpty' => $isMissingValue],
             ['target_level', 'integer', 'min' => 1, 'max' => 20],
             ['status', 'in', 'range' => [self::STATUS_DRAFT, self::STATUS_READY], 'strict' => true],
             ['ability_score_method', 'in', 'range' => [self::ABILITY_METHOD_STANDARD_ARRAY], 'strict' => true],
@@ -70,6 +74,15 @@ class Character extends ActiveRecord
                 'params' => ['expectedType' => 'background'],
             ],
         ];
+    }
+
+    public function validateVariant($attribute,$params): void
+    {
+        if($this->hasErrors($attribute))return;
+        $this->validateCatalogEntry($attribute,['expectedType'=>$params['type']]);
+        if($this->hasErrors($attribute))return;
+        $row=(new \yii\db\Query())->from('{{%'.$params['table'].'}}')->where(['catalog_entry_id'=>$this->$attribute])->one();
+        if(!$row||$row[$params['parent']]!==$this->{$params['parent']}||$row['selection_level']>$this->target_level)$this->addError($attribute,'Вариант не принадлежит выбранному классу/виду или ещё недоступен по уровню.');
     }
 
     public function validateCatalogEntry($attribute, $params): void

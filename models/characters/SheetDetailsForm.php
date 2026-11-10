@@ -18,6 +18,7 @@ class SheetDetailsForm extends Model
     public function validateDetails($attribute, $params): void
     {
         if (!is_array($this->details) || count($this->details) !== count(self::defaults()) || array_diff(array_keys(self::defaults()), array_keys($this->details))) { $this->addError($attribute, 'Передайте все поля листа без дополнительных полей.'); return; }
+        foreach(['size','languages'] as $key)if(($this->details[$key]??'')!=='')$this->addError($attribute,'Размер и языки определяются архивом и проверяемыми выборами персонажа.');
         foreach (['armor_class', 'speed_feet', 'initiative', 'spell_attack_bonus', 'spell_save_dc'] as $key) {
             $value = $this->details[$key];
             $minimum = in_array($key, ['initiative', 'spell_attack_bonus'], true) ? -2147483648 : ($key === 'speed_feet' ? 0 : 1);

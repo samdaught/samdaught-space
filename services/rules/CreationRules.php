@@ -11,9 +11,10 @@ use yii\db\Query;
 
 class CreationRules
 {
-    public const SOURCE_TYPES = ['species', 'class', 'background', 'feature', 'feat'];
-    public const TARGET_TYPES = ['feature', 'spell', 'skill', 'feat', 'item'];
+    public const SOURCE_TYPES = ['species', 'class', 'background', 'feature', 'feat','subclass','species_variant'];
+    public const TARGET_TYPES = ['feature', 'spell', 'skill', 'feat', 'item','species_variant'];
     public const MAX_ROWS = 100;
+    public const MAX_OPTIONS = 10000;
 
     public function read(int $sourceId): ?array
     {
@@ -39,9 +40,10 @@ class CreationRules
     public function targetAvailable(CatalogEntry $entry): bool
     {
         return in_array($entry->type, self::TARGET_TYPES, true)
+            && ($entry->type !== 'spell' || (new Query())->from('{{%spell_definition}}')->where(['catalog_entry_id'=>$entry->id])->exists())
             && ($entry->type !== 'skill' || SkillDefinition::findOne($entry->id) !== null)
             && ($entry->type !== 'feat' || FeatDefinition::findOne($entry->id) !== null)
-            && ($entry->type !== 'item' || ToolDefinition::findOne($entry->id) !== null);
+            && ($entry->type !== 'item' || (new Query())->from('{{%item_definition}}')->where(['catalog_entry_id'=>$entry->id])->exists());
     }
 
     public function options(?RuleProfile $profile): array
@@ -50,7 +52,7 @@ class CreationRules
         if ($profile !== null) foreach (CatalogEntry::find()->where(['type' => self::TARGET_TYPES, 'is_published' => true])->orderBy(['title' => SORT_ASC, 'id' => SORT_ASC])->all() as $entry) {
             if ((new CatalogAvailability())->isAvailableInProfile($entry, $profile) && $this->targetAvailable($entry)) $options[] = $entry->getAttributes(['id', 'type', 'title']);
         }
-        return ['entries' => $options, 'source_types' => self::SOURCE_TYPES, 'max_rows' => self::MAX_ROWS,
+        return ['entries' => $options, 'source_types' => self::SOURCE_TYPES, 'max_rows' => self::MAX_ROWS,'max_options'=>self::MAX_OPTIONS,
             'modes' => [['code' => 'grant', 'title' => 'Получить запись / владение навыком или инструментом'], ['code' => 'expertise', 'title' => 'Экспертиза навыка, которым уже владеет персонаж']]];
     }
 

@@ -29,12 +29,13 @@ class CreationRulesForm extends Model
             $grantIds[] = $grant['entry_id']; $targets[] = [$grant['entry_id'], $grant['mode']];
         }
         if (count(array_unique($grantIds)) !== count($grantIds)) { $this->addError($attribute, 'Фиксированные выдачи не должны повторяться.'); return; }
-        foreach ($rule['choices'] as $choice) {
+        foreach ($rule['choices']??[] as $choice) {
             if (!$this->keys($choice, ['code', 'title', 'count', 'mode', 'entry_ids']) || !is_string($choice['code']) || !preg_match('/^[a-z][a-z0-9_]{0,31}$/D', $choice['code'])
                 || !is_string($choice['title']) || trim($choice['title']) === '' || mb_strlen($choice['title']) > 120 || !is_int($choice['count']) || $choice['count'] < 1 || $choice['count'] > CreationRules::MAX_ROWS
-                || !$this->mode($choice['mode']) || !is_array($choice['entry_ids']) || !array_is_list($choice['entry_ids']) || count($choice['entry_ids']) > CreationRules::MAX_ROWS || count($choice['entry_ids']) < $choice['count']) {
+                || !$this->mode($choice['mode']) || !is_array($choice['entry_ids']) || !array_is_list($choice['entry_ids']) || count($choice['entry_ids']) > CreationRules::MAX_OPTIONS || count($choice['entry_ids']) < $choice['count']) {
                 $this->addError($attribute, 'Для группы нужны уникальный код латиницей, название, количество от 1 до 100 и достаточный список вариантов.'); return;
             }
+            if (in_array($choice['code'], \app\services\rules\EntryMechanics::MAGIC_CODES, true)) { $this->addError($attribute, 'Этот код группы зарезервирован для заклинательства класса.'); return; }
             $codes[] = $choice['code'];
             foreach ($choice['entry_ids'] as $id) { if (!$this->id($id)) { $this->addError($attribute, 'Выберите варианты группы из архива.'); return; } $targets[] = [$id, $choice['mode']]; }
             if (count(array_unique($choice['entry_ids'])) !== count($choice['entry_ids'])) { $this->addError($attribute, 'Варианты внутри группы не должны повторяться.'); return; }
@@ -61,9 +62,9 @@ class CreationRulesForm extends Model
         if (isset($seen[$id])) return false;
         $seen[$id] = true; $path[$id] = true;
         $rule = $rules->read($id);
-        if ($rule !== null) {
-            $children = array_column($rule['grants'], 'entry_id');
-            foreach ($rule['choices'] as $choice) $children = array_merge($children, $choice['entry_ids']);
+        {
+            $children = array_merge(array_column($rule['grants']??[], 'entry_id'),(new \yii\db\Query())->select('target_entry_id')->from('{{%entry_level_grant}}')->where(['source_entry_id'=>$id])->column());
+            foreach ($rule['choices']??[] as $choice) $children = array_merge($children, $choice['entry_ids']);
             foreach (array_unique($children) as $child) if ($this->cyclic((int) $child, $rules, $seen, $path, $depth + 1)) return true;
         }
         unset($path[$id]);

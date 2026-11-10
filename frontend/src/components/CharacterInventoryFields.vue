@@ -3,6 +3,7 @@ import type { CharacterInventory, InventoryItemDraft } from '../types/characterE
 
 const props = defineProps<{ data: CharacterInventory; backgroundStale: boolean }>()
 const items = defineModel<InventoryItemDraft[]>({ required: true })
+const startingEquippedIds = defineModel<number[]>('startingEquippedIds', { default: () => [] })
 
 function addItem(): void {
   if (items.value.length < props.data.max_items) {
@@ -41,7 +42,8 @@ function formatMoney(cp: number): string {
   </template>
   <h3>Добавлено в черновике</h3>
   <p>
-    Ручное заполнение снаряжения. Стоимость и игровые эффекты экипировки пока не рассчитываются.
+    Добавьте личные вещи. КД от настроенных доспехов и щита, а также постоянные бонусы экипировки
+    рассчитываются автоматически после сохранения.
   </p>
   <p v-if="data.item_options.length === 0">
     В этом профиле нет доступных опубликованных предметов.
@@ -90,6 +92,13 @@ function formatMoney(cp: number): string {
       <li v-for="item in data.other_items" :key="item.id">
         {{ item.title }} × {{ item.quantity }} — {{ item.source_title
         }}{{ item.is_equipped ? ', экипирован' : '' }}
+        <label v-if="item.source_kind === 'creation'"
+          ><input
+            v-model="startingEquippedIds"
+            type="checkbox"
+            :value="item.item_entry_id"
+          />Экипировать полученный предмет</label
+        >
         <p v-if="item.note">{{ item.note }}</p>
         <p v-if="!item.available">Запись предмета сейчас недоступна.</p>
       </li>

@@ -51,7 +51,10 @@ class CharacterClassSkills
         $needsReselection = ($saved !== null && !$matches) || ($matches && !$choicesValid);
         if ($needsReselection) $issues[] = 'Класс, профиль или разрешённые навыки изменились. Сохраните актуальный выбор.';
         $effectiveIds = $choicesValid ? $selectedIds : [];
-        $complete = $choicesValid && count($effectiveIds) === $count;
+        $background=(new CharacterBackgroundBenefits())->get($character);
+        $overlap=(bool)array_intersect($effectiveIds,array_column($background['skills'],'id'));
+        if ($overlap) $issues[]='Замените навыки класса, которые уже даёт предыстория.';
+        $complete = $choicesValid && count($effectiveIds) === $count && !$overlap;
         if ($configured && !$complete) $issues[] = 'Выберите навыки класса: требуется ' . $count . '.';
         return [
             'class_entry_id' => $character->class_entry_id, 'rule_profile_id' => $character->rule_profile_id,

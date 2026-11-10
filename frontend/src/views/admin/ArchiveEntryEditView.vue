@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import RuleField from '../../components/RuleField.vue'
+import { rulebookSchema, emptyRulebook } from '../../api/rulebook'
+import { useRulebook } from '../../composables/useRulebook'
+import EntryMechanicsFields from '../../components/EntryMechanicsFields.vue'
+import { useEntryMechanics } from '../../composables/useEntryMechanics'
+import { emptyMechanics } from '../../api/entryMechanics'
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -161,6 +167,15 @@ const form = ref<CatalogEntryUpdateInput>({
   source_id: null,
 })
 
+const mechanics = useEntryMechanics(
+  () => entry.value?.origin_profile_id ?? null,
+  () => entry.value?.type ?? '',
+)
+const rulebook = useRulebook(
+  () => entry.value?.origin_profile_id ?? null,
+  () => entry.value?.type ?? '',
+)
+
 const changes = useFormChanges(
   () => [
     form.value,
@@ -174,6 +189,8 @@ const changes = useFormChanges(
     startingEquipment.value,
     basicRuleFields.value,
     creation.fields.value,
+    mechanics.fields.value,
+    rulebook.fields.value,
   ],
   () => saving.value,
   () => !loading.value,
@@ -229,6 +246,8 @@ onMounted(async () => {
       getContentSourceOptions(),
     ])
 
+    mechanics.fields.value = loadedEntry.mechanics ?? emptyMechanics()
+    rulebook.fields.value = loadedEntry.rulebook ?? emptyRulebook()
     entry.value = loadedEntry
     sourceOptions.value = loadedSources
 
@@ -306,6 +325,14 @@ async function submit() {
     submitError.value = 'Выберите категорию черты'
     return
   }
+  if (!rulebook.ready.value) {
+    submitError.value = rulebook.error.value || 'Дождитесь загрузки правил книги'
+    return
+  }
+  if (!mechanics.ready.value) {
+    submitError.value = mechanics.error.value || 'Дождитесь загрузки механики'
+    return
+  }
   if (!creation.ready.value) {
     submitError.value = 'Дождитесь загрузки правил выдач или повторите загрузку'
     return
@@ -376,6 +403,9 @@ async function submit() {
 
   try {
     entry.value = await updateCatalogEntry(current.id, {
+      revision: current.revision,
+      mechanics: mechanics.input.value,
+      rulebook: rulebook.fields.value,
       ...(creation.input.value === undefined ? {} : { creation_rules: creation.input.value }),
       ...form.value,
       ...(current.type === 'background' &&
@@ -566,6 +596,27 @@ async function submit() {
           :options="creation.options.value"
         />
 
+        <p v-if="rulebook.error.value" role="alert">
+          {{ rulebook.error.value }}
+          <button type="button" @click="rulebook.load()">Повторить</button>
+        </p>
+        <RuleField
+          v-if="rulebook.options.value"
+          v-model="rulebook.fields.value"
+          :schema="rulebookSchema(entry.type)"
+          :options="rulebook.options.value"
+          :disabled="saving"
+        />
+        <p v-if="mechanics.error.value" role="alert">
+          {{ mechanics.error.value }}
+          <button type="button" @click="mechanics.load()">Повторить загрузку механики</button>
+        </p>
+        <EntryMechanicsFields
+          v-if="mechanics.options.value"
+          v-model="mechanics.fields.value"
+          :category="entry.type"
+          :options="mechanics.options.value"
+        />
         <button
           type="submit"
           :disabled="

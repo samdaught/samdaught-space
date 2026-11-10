@@ -16,7 +16,7 @@ onMounted(async () => {
   }
 })
 
-const form = ref({ code: '', title: '', rights_note: '' })
+const form = ref({ title: '' })
 const saving = ref(false)
 const submitError = ref('')
 const changes = useFormChanges(
@@ -33,7 +33,7 @@ async function submit() {
   try {
     const created = await createContentSource(form.value)
     sources.value.push(created)
-    form.value = { code: '', title: '', rights_note: '' }
+    form.value = { title: '' }
     changes.markSaved()
   } catch (cause) {
     submitError.value = cause instanceof Error ? cause.message : 'Не удалось создать источник'
@@ -44,7 +44,7 @@ async function submit() {
 </script>
 
 <template>
-  <h1>Источники</h1>
+  <h2>Источники</h2>
   <p v-if="error">{{ error }}</p>
   <ul v-else>
     <li v-for="source in sources" :key="source.id">
@@ -54,9 +54,7 @@ async function submit() {
   <form @submit.prevent="submit">
     <fieldset :disabled="saving">
       <legend>Новый источник</legend>
-      <label>Код <input v-model="form.code" required maxlength="64" /></label>
       <label>Название <input v-model="form.title" required maxlength="255" /></label>
-      <label>Условия использования <textarea v-model="form.rights_note" required></textarea></label>
       <button type="submit" :disabled="saving">Добавить источник</button>
     </fieldset>
     <p v-if="submitError">{{ submitError }}</p>

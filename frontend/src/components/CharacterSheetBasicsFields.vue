@@ -41,7 +41,6 @@ function signed(value: number | null): string {
           <tr>
             <th scope="col">Спасбросок</th>
             <th scope="col">Владение от класса</th>
-            <th scope="col">Экспертиза</th>
             <th scope="col">Базовый бонус</th>
           </tr>
         </thead>
@@ -75,6 +74,7 @@ function signed(value: number | null): string {
             <th scope="col">Владение от предыстории</th>
             <th scope="col">Владение от класса</th>
             <th scope="col">Другие владения</th>
+            <th scope="col">Экспертиза</th>
             <th scope="col">Базовый бонус</th>
           </tr>
         </thead>

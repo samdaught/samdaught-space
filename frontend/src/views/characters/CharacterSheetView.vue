@@ -113,6 +113,7 @@ watch(
               <th scope="col">Характеристика</th>
               <th scope="col">База</th>
               <th scope="col">Предыстория</th>
+              <th scope="col">Другие бонусы</th>
               <th scope="col">Итого</th>
               <th scope="col">Модификатор</th>
             </tr>
@@ -122,6 +123,7 @@ watch(
               <th scope="row">{{ ability.title }}</th>
               <td>{{ ability.base_score ?? '—' }}</td>
               <td>+{{ ability.applied_increase }}</td>
+              <td>{{ ability.source_bonus ?? 0 }}</td>
               <td>{{ ability.total_score ?? '—' }}</td>
               <td>
                 {{
@@ -143,31 +145,117 @@ watch(
         <dt>Максимальное здоровье</dt>
         <dd>{{ state.sheet_basics.hit_point_max ?? 'Не рассчитано' }}</dd>
         <dt>КД в снаряжении</dt>
-        <dd>{{ state.sheet_details.armor_class ?? 'Не заполнена' }}</dd>
+        <dd>
+          {{ state.sheet_basics.armor_class ?? state.sheet_details.armor_class ?? 'Не заполнена' }}
+        </dd>
         <dt>Скорость</dt>
         <dd>
           {{
-            state.sheet_details.speed_feet ?? state.sheet_basics.base_speed_feet ?? 'Не рассчитана'
+            state.sheet_basics.speed_feet ??
+            state.sheet_details.speed_feet ??
+            state.sheet_basics.base_speed_feet ??
+            'Не рассчитана'
           }}
           футов
         </dd>
         <dt>Инициатива</dt>
         <dd>
           {{
-            state.sheet_details.initiative ?? state.sheet_basics.base_initiative ?? 'Не рассчитана'
+            state.sheet_basics.initiative ??
+            state.sheet_details.initiative ??
+            state.sheet_basics.base_initiative ??
+            'Не рассчитана'
           }}
         </dd>
         <dt>Бонус атаки заклинанием</dt>
-        <dd>{{ state.sheet_details.spell_attack_bonus ?? 'Не указан' }}</dd>
+        <dd>
+          {{
+            state.sheet_basics.spell_attack_bonus ??
+            state.sheet_details.spell_attack_bonus ??
+            'Не указан'
+          }}
+        </dd>
         <dt>СЛ спасброска от заклинаний</dt>
-        <dd>{{ state.sheet_details.spell_save_dc ?? 'Не указана' }}</dd>
+        <dd>
+          {{
+            state.sheet_basics.spell_save_dc ?? state.sheet_details.spell_save_dc ?? 'Не указана'
+          }}
+        </dd>
         <dt>Размер</dt>
-        <dd>{{ state.sheet_details.size || 'Не заполнен' }}</dd>
+        <dd>{{ state.sheet_basics.size || state.sheet_details.size || 'Не заполнен' }}</dd>
         <dt>Языки</dt>
-        <dd>{{ state.sheet_details.languages || 'Не заполнены' }}</dd>
+        <dd>
+          {{ state.sheet_basics.languages || state.sheet_details.languages || 'Не заполнены' }}
+        </dd>
       </dl>
     </section>
     <CharacterSheetBasicsFields :data="state.sheet_basics" />
+    <p v-if="state.sheet_basics.armor_untrained">
+      Доспехи без подготовки: нельзя накладывать заклинания; помеха атакам и проверкам/спасброскам
+      Силы и Ловкости.
+    </p>
+    <p v-if="state.sheet_basics.stealth_disadvantage">Доспехи дают помеху Скрытности.</p>
+    <section v-if="state.sheet_basics.resources?.length">
+      <h2>Ресурсы</h2>
+      <p v-for="(resource, index) in state.sheet_basics.resources" :key="index">
+        {{ resource.title }}: {{ resource.maximum }} · {{ resource.recovery }} ·
+        {{ resource.source_title }}
+      </p>
+    </section>
+    <section v-if="state.sheet_basics.weapons?.length">
+      <h2>Оружие</h2>
+      <p v-for="weapon in state.sheet_basics.weapons" :key="weapon.id">
+        {{ weapon.title }} · атака {{ weapon.attack_bonus ?? '—' }} · урон {{ weapon.damage }} ({{
+          weapon.damage_type
+        }}) · {{ weapon.proficient ? 'Есть владение' : 'Без владения'
+        }}<span v-if="weapon.mastery_available"> · мастерство {{ weapon.mastery }}</span>
+      </p>
+    </section>
+    <section
+      v-for="caster in state.creation.casters?.filter((c) => c.enabled && c.slots?.length) ?? []"
+      :key="caster.source_id"
+    >
+      <h2>Ячейки: {{ caster.source_title }}</h2>
+      <p v-for="slot in caster.slots" :key="slot.spell_level">
+        Круг {{ slot.spell_level }}: {{ slot.count }}
+      </p>
+      <p>Восстановление: {{ caster.recovery }}</p>
+    </section>
+
+    <section
+      v-for="(source, index) in state.sheet_basics.spellcasting_sources ?? []"
+      :key="source.source_id + ':' + index"
+    >
+      <h2>Магия: {{ source.source_title }}</h2>
+      <p>Атака {{ source.attack_bonus ?? '—' }} · СЛ {{ source.save_dc ?? '—' }}</p>
+      <ul>
+        <li v-for="spell in source.spells" :key="spell.id">
+          {{ spell.title }}
+          <p v-for="(grant, i) in spell.grants ?? []" :key="i">
+            {{ grant.always_prepared ? 'Всегда подготовлено. ' : ''
+            }}{{ grant.count_against_limit ? 'Входит в лимит. ' : 'Сверх лимита. '
+            }}{{ grant.cast_with_slots ? 'Доступно через ячейки. ' : '' }}Бесплатных применений:
+            {{ grant.free_uses }}; восстановление: {{ grant.recovery }}
+          </p>
+        </li>
+      </ul>
+    </section>
+    <section v-if="state.creation.spellcasting?.enabled">
+      <h2>Заклинательство</h2>
+      <p>Ячейки первого круга: {{ state.creation.spellcasting.slot_count }}</p>
+      <p>
+        Атака {{ state.sheet_basics.spell_attack_bonus ?? '—' }} · СЛ
+        {{ state.sheet_basics.spell_save_dc ?? '—' }}
+      </p>
+    </section>
+    <section v-if="state.sheet_basics.traits?.length">
+      <h2>Владения и свойства</h2>
+      <ul>
+        <li v-for="(trait, index) in state.sheet_basics.traits" :key="index">
+          {{ trait.value }} · {{ trait.source_title }}
+        </li>
+      </ul>
+    </section>
     <section>
       <h2>Особенности, черты, заклинания и дополнительные владения</h2>
       <details v-for="entry in state.creation.entries" :key="entry.id">
@@ -193,6 +281,15 @@ watch(
         Деньги: {{ Math.floor(state.inventory.background.money_cp / 100) }} ЗМ
         {{ state.inventory.background.money_cp % 100 }} ММ
       </p>
+      <template v-if="state.starting_packages"
+        ><h3>Стартовые комплекты</h3>
+        <ul>
+          <li v-for="(item, index) in state.starting_packages.items" :key="index">
+            {{ item.title }} × {{ item.quantity }} · {{ item.source_title }}
+          </li>
+        </ul>
+        <p>Деньги комплектов: {{ state.starting_packages.money_cp / 100 }} зм</p></template
+      >
       <h3>Остальные предметы</h3>
       <ul>
         <li

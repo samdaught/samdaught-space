@@ -6,9 +6,23 @@ namespace app\models\catalog;
 
 use app\models\rules\RuleProfile;
 use yii\db\ActiveRecord;
+use app\helpers\AutomaticCodeBehavior;
 
 class CatalogEntry extends ActiveRecord
 {
+    public function behaviors(): array
+    {
+        return [
+            'slug' => [
+                'class' => AutomaticCodeBehavior::class,
+                'attribute' => 'title',
+                'immutable' => true,
+                'ensureUnique' => true,
+                'uniqueValidator' => ['targetAttribute' => ['type', 'slug']],
+            ],
+        ];
+    }
+
     public function rules(): array
     {
         return [

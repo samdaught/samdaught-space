@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import RuleField from '../../components/RuleField.vue'
+import { rulebookSchema, emptyRulebook } from '../../api/rulebook'
+import { useRulebook } from '../../composables/useRulebook'
+import EntryMechanicsFields from '../../components/EntryMechanicsFields.vue'
+import { useEntryMechanics } from '../../composables/useEntryMechanics'
+import { emptyMechanics } from '../../api/entryMechanics'
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getRuleProfiles, type RuleProfile } from '../../api/ruleProfiles'
@@ -52,7 +58,6 @@ const router = useRouter()
 const form = ref({
   type: '',
   title: '',
-  slug: '',
   body: '',
 })
 
@@ -105,6 +110,15 @@ const creation = useCreationRuleFields(
   () => form.value.type,
 )
 
+const mechanics = useEntryMechanics(
+  () => originProfileId.value,
+  () => form.value.type,
+)
+const rulebook = useRulebook(
+  () => originProfileId.value,
+  () => form.value.type,
+)
+
 const changes = useFormChanges(
   () => [
     form.value,
@@ -118,6 +132,8 @@ const changes = useFormChanges(
     startingEquipment.value,
     basicRuleFields.value,
     creation.fields.value,
+    mechanics.fields.value,
+    rulebook.fields.value,
     originProfileId.value,
     sourceId.value,
   ],
@@ -302,6 +318,14 @@ async function submit() {
     return
   }
 
+  if (!rulebook.ready.value) {
+    submitError.value = rulebook.error.value || 'Дождитесь загрузки правил книги'
+    return
+  }
+  if (!mechanics.ready.value) {
+    submitError.value = mechanics.error.value || 'Дождитесь загрузки механики'
+    return
+  }
   if (!creation.ready.value) {
     submitError.value = 'Дождитесь загрузки правил выдач или повторите загрузку'
     return
@@ -370,10 +394,11 @@ async function submit() {
   }
 
   const input: NewCatalogEntry = {
+    mechanics: mechanics.input.value,
+    rulebook: rulebook.fields.value,
     ...(creation.input.value === undefined ? {} : { creation_rules: creation.input.value }),
     type: form.value.type,
     title: form.value.title,
-    slug: form.value.slug,
     body: form.value.body,
     origin_profile_id: originProfileId.value,
     source_id: sourceId.value,
@@ -446,11 +471,6 @@ async function submit() {
         <label>
           Название
           <input v-model="form.title" required maxlength="255" />
-        </label>
-
-        <label>
-          Код в адресе
-          <input v-model="form.slug" required maxlength="100" />
         </label>
 
         <label>
@@ -578,6 +598,27 @@ async function submit() {
           :options="creation.options.value"
         />
 
+        <p v-if="rulebook.error.value" role="alert">
+          {{ rulebook.error.value }}
+          <button type="button" @click="rulebook.load()">Повторить</button>
+        </p>
+        <RuleField
+          v-if="rulebook.options.value"
+          v-model="rulebook.fields.value"
+          :schema="rulebookSchema(form.type)"
+          :options="rulebook.options.value"
+          :disabled="saving"
+        />
+        <p v-if="mechanics.error.value" role="alert">
+          {{ mechanics.error.value }}
+          <button type="button" @click="mechanics.load()">Повторить загрузку механики</button>
+        </p>
+        <EntryMechanicsFields
+          v-if="mechanics.options.value"
+          v-model="mechanics.fields.value"
+          :category="form.type"
+          :options="mechanics.options.value"
+        />
         <button
           type="submit"
           :disabled="

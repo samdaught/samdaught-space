@@ -12,7 +12,7 @@ use app\models\rules\AbilityDefinition;
 class AbilityScoreCalculator
 {
 
-    public function calculate(Character $character): array
+    public function calculate(Character $character, ?array $creation = null): array
     {
         $definitions = AbilityDefinition::find()->select(['code', 'title'])
             ->orderBy(['code' => SORT_ASC])->asArray()->all();
@@ -45,19 +45,22 @@ class AbilityScoreCalculator
             }
         }
 
+        $creation ??= (new CreationBenefits())->get($character);
         $modifier = new AbilityModifier();
         $abilities = [];
         foreach ($definitions as $definition) {
             $code = $definition['code'];
             $base = $baseScores[$code];
             $increase = $increases[$code] ?? 0;
-            $total = $baseValid && $base !== null ? $base + $increase : null;
+            $bonus=$creation['bonuses']['ability_' . $code]??0;
+            $total = $baseValid && $base !== null ? max(1,min($creation['ability_caps'][$code]??20,$base + $increase + $bonus)) : null;
             $abilities[] = [
                 'code' => $code,
                 'title' => $definition['title'],
                 'base_score' => $base,
                 'base_modifier' => $modifier->calculate($base),
                 'applied_increase' => $increase,
+                'source_bonus' => $bonus,
                 'total_score' => $total,
                 'total_modifier' => $modifier->calculate($total),
             ];

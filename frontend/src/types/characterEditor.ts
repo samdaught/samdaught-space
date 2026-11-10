@@ -3,6 +3,7 @@ export type CharacterAbilityScore = {
   title: string
   base_score: number | null
   base_modifier: number | null
+  source_bonus?: number
   applied_increase: number
   total_score: number | null
   total_modifier: number | null
@@ -92,6 +93,47 @@ export type CharacterClassSkills = {
 }
 
 export type CharacterSheetBasics = {
+  armor_untrained?: boolean
+  stealth_disadvantage?: boolean
+  armor_speed_penalty?: number
+  resources?: { title: string; maximum: number; recovery: string; source_title: string }[]
+  weapons?: {
+    id: number
+    title: string
+    attack_bonus: number | null
+    damage: string
+    damage_type: string
+    mastery: string | null
+    mastery_available: boolean
+    proficient: boolean
+  }[]
+  spellcasting_sources?: {
+    source_id: number
+    source_title: string
+    ability_code: string | null
+    attack_bonus: number | null
+    save_dc: number | null
+    spells: {
+      id: number
+      title: string
+      grants?: {
+        always_prepared: boolean
+        count_against_limit: boolean
+        cast_with_slots: boolean
+        free_uses: number
+        recovery: string
+        cast_level: number | null
+      }[]
+    }[]
+  }[]
+  armor_class?: number | null
+  speed_feet?: number | null
+  initiative?: number | null
+  spell_attack_bonus?: number | null
+  spell_save_dc?: number | null
+  languages?: string
+  size?: string
+  traits?: { source_id: number; source_title: string; kind: string; value: string }[]
   rule_profile_id: number
   species_entry_id: number | null
   class_entry_id: number | null
@@ -177,6 +219,8 @@ export type CharacterInventory = {
 }
 
 export type CharacterContext = {
+  subclass_entry_id: number | null
+  species_variant_entry_id: number | null
   rule_profile_id: number | null
   target_level: number | ''
   species_entry_id: number | null
@@ -190,6 +234,9 @@ export type CharacterEditorDraft = CharacterContext & {
   background_choices: BackgroundBenefitsDraft
   class_skill_entry_ids: number[]
   inventory_items: InventoryItemDraft[]
+  starting_equipped_ids: number[]
+  equipment_choices: Record<string, number>
+  rule_choices: Record<string, string[]>
   creation_choices: Record<string, number[]>
   sheet_details: SheetDetailsDraft
 }
@@ -204,9 +251,32 @@ export type CharacterEditorInput = Omit<
   sheet_details: SheetDetails
   finish: boolean
 }
+export type StartingPackages = {
+  groups: {
+    source_id: number
+    source_title: string
+    selected_id: number | null
+    options: {
+      id: number
+      title: string
+      money_cp: number
+      available: boolean
+      items: { item_entry_id: number; title: string; quantity: number }[]
+    }[]
+  }[]
+  selections: Record<string, number>
+  items: { item_entry_id: number; title: string; quantity: number; source_title: string }[]
+  money_cp: number
+  complete: boolean
+  issues: string[]
+}
 export type CharacterEditorOptions = {
+  starting_packages: StartingPackages
   context: CharacterContext
-  entry_options: Record<'species' | 'class' | 'background', { id: number; title: string }[]>
+  entry_options: Record<
+    'species' | 'class' | 'background' | 'subclass' | 'species_variant',
+    { id: number; title: string }[]
+  >
   ability_scores: CharacterAbilityScores
   background_abilities: CharacterBackgroundAbilities
   benefits: CharacterBackgroundBenefits
@@ -258,6 +328,43 @@ export type SheetDetailsDraft = Omit<
   spell_save_dc: number | null | ''
 }
 export type CreationBenefits = {
+  rule_selections: Record<string, string[]>
+  scalar_groups: {
+    key: string
+    source_title: string
+    title: string
+    kind: string
+    count: number
+    options: { value: string; title: string }[]
+    selected_values: string[]
+  }[]
+  resources: {
+    source_id: number
+    source_title: string
+    title: string
+    maximum: number
+    recovery: string
+  }[]
+  ability_caps?: Record<string, number>
+
+  bonuses?: Record<string, number>
+  traits?: { source_id: number; source_title: string; kind: string; value: string }[]
+  spellcasting?: {
+    configured: boolean
+    enabled: boolean
+    ability_code: string | null
+    slot_count: number
+    slot_level?: number
+    issues: string[]
+  }
+  casters?: {
+    source_id: number
+    source_title: string
+    enabled: boolean
+    kind?: string
+    slots?: { spell_level: number; count: number }[]
+    recovery?: string
+  }[]
   hit_point_bonus: number
   configured: boolean
   complete: boolean
@@ -271,7 +378,22 @@ export type CreationBenefits = {
     options: { id: number; type: string; title: string }[]
     selected_entry_ids: number[]
   }[]
-  entries: { id: number; type: string; title: string; body: string | null }[]
+  entries: {
+    id: number
+    type: string
+    title: string
+    body: string | null
+    spell?: {
+      level: number
+      school: string
+      casting_time: string
+      range_text: string
+      components: string
+      duration: string
+      concentration: boolean
+      ritual: boolean
+    }
+  }[]
   skill_entry_ids: number[]
   proficient_skill_entry_ids: number[]
   expertise_skill_entry_ids: number[]

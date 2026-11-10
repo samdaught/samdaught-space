@@ -11,7 +11,12 @@ const selected = defineModel<number[]>({ required: true })
     можно сохранить в черновике.
   </p>
   <label v-for="skill in data.options" :key="skill.id">
-    <input v-model="selected" type="checkbox" :value="skill.id" />{{ skill.title }}
+    <input
+      v-model="selected"
+      type="checkbox"
+      :value="skill.id"
+      :disabled="backgroundSkillIds.includes(skill.id) && !selected.includes(skill.id)"
+    />{{ skill.title }}
     <span v-if="backgroundSkillIds.includes(skill.id)">
       — уже даёт предыстория; повторное владение не увеличивает бонус</span
     >

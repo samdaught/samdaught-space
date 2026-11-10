@@ -1,3 +1,5 @@
+import type { RulebookData } from './rulebook'
+import type { EntryMechanics } from './entryMechanics'
 import type { PaginationMeta } from './pagination'
 import type { CreationRuleInput } from './creationRules'
 import type { BackgroundToolInput } from './itemDefinitions'
@@ -35,6 +37,9 @@ export async function getCatalogEntryTypes(): Promise<CatalogEntryType[]> {
 }
 
 export type NewCatalogEntry = {
+  rulebook?: RulebookData
+  revision?: number
+  mechanics?: EntryMechanics
   creation_rules?: CreationRuleInput
   species_speed_feet?: number
   class_hit_die_sides?: number
@@ -52,7 +57,7 @@ export type NewCatalogEntry = {
   ability_codes?: string[]
   skill_ability_code?: string
   type: string
-  slug: string
+  slug?: string
   title: string
   origin_profile_id: number
   source_id: number | null
@@ -60,6 +65,9 @@ export type NewCatalogEntry = {
 }
 
 export type CatalogEntry = {
+  rulebook?: RulebookData
+  revision?: number
+  mechanics?: EntryMechanics
   creation_rules?: CreationRuleInput | null
   species_speed_feet?: number | null
   class_hit_die_sides?: number | null
@@ -93,6 +101,9 @@ export type CatalogEntryDetails = CatalogEntry & {
 }
 
 export type CatalogEntryUpdateInput = {
+  rulebook?: RulebookData
+  revision?: number
+  mechanics?: EntryMechanics
   creation_rules?: CreationRuleInput
   species_speed_feet?: number
   class_hit_die_sides?: number
@@ -153,6 +164,10 @@ export async function updateCatalogEntry(
     body: JSON.stringify(input),
   })
 
+  if (response.status === 409)
+    throw new Error(
+      'Запись или её связи изменились. Перезагрузите запись перед сохранением. Введённые данные оставлены в форме.',
+    )
   if (response.status === 422) {
     const result = (await response.json()) as ValidationErrorResponse
     const firstMessage = Object.values(result.error.fields)[0]?.[0]
@@ -205,6 +220,7 @@ export async function createCatalogEntry(input: NewCatalogEntry): Promise<Catalo
 }
 
 export type CatalogEntryListItem = {
+  mechanics_status?: 'ready' | 'partial' | 'text'
   id: number
   title: string
   type: string

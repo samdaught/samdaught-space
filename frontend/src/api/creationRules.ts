@@ -18,6 +18,7 @@ export type CreationRuleDraft = {
 export type CreationRuleOptions = {
   entries: { id: number; type: string; title: string }[]
   source_types: string[]
+  max_options: number
   max_rows: number
   modes: { code: CreationMode; title: string }[]
 }
@@ -63,7 +64,7 @@ export function getCreationRuleInput(
       choice.count < 1 ||
       choice.count > options.max_rows ||
       choice.entry_ids.length < choice.count ||
-      choice.entry_ids.length > options.max_rows ||
+      choice.entry_ids.length > options.max_options ||
       new Set(choice.entry_ids).size !== choice.entry_ids.length ||
       choice.entry_ids.some((id) => !allowed(id, choice.mode))
     )

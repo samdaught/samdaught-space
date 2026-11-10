@@ -46,9 +46,7 @@ export async function getContentSources(): Promise<ContentSource[]> {
   return body.data
 }
 export type NewContentSource = {
-  code: string
   title: string
-  rights_note: string
 }
 
 type CreatedSourceResponse = {
