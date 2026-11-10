@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew samdaught.space TLS certificate
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/samdaught-space
+ExecStart=/bin/sh /opt/samdaught-space/scripts/certificates.sh renew
+TimeoutStartSec=10min

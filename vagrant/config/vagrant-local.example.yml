@@ -1,0 +1,13 @@
+github_token: <your-personal-github-token>
+
+timezone: Europe/London
+
+box_check_update: false
+
+machine_name: yii2basic
+
+ip: 192.168.83.137
+
+cpus: 1
+
+memory: 1024

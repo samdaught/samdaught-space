@@ -1,0 +1,702 @@
+<?php
+
+namespace app\controllers\catalog;
+
+use Yii;
+use yii\filters\AccessControl;
+use yii\filters\VerbFilter;
+
+use app\controllers\ApiController;
+use app\models\catalog\CatalogEntry;
+use app\models\catalog\CatalogEntryType;
+use app\models\catalog\BackgroundAbilityOptionsForm;
+use app\models\catalog\SkillDefinitionForm;
+use app\models\catalog\BackgroundSkillsForm;
+use app\models\catalog\BackgroundFeatForm;
+use app\models\catalog\FeatDefinitionForm;
+use app\models\catalog\ItemDefinitionForm;
+use app\models\catalog\BackgroundToolForm;
+use app\models\catalog\BackgroundStartingEquipmentForm;
+use app\models\catalog\SpeciesDefinitionForm;
+use app\models\catalog\ClassDefinitionForm;
+use app\models\rules\AbilityDefinition;
+use app\models\rules\SkillDefinition;
+use app\models\rules\BackgroundSkillProficiency;
+use app\models\rules\BackgroundFeat;
+use app\models\rules\FeatCategory;
+use app\models\rules\FeatDefinition;
+use app\models\rules\ItemDefinition;
+use app\models\rules\ItemKind;
+use app\models\rules\ToolDefinition;
+use app\models\rules\ToolGroup;
+use app\models\rules\BackgroundToolProficiency;
+use app\models\rules\SpeciesDefinition;
+use app\models\rules\ClassDefinition;
+use app\models\rules\ClassSavingThrowProficiency;
+use app\models\rules\HitDieDefinition;
+use app\services\rules\BackgroundAbilityOptionsWriter;
+use app\services\rules\SkillDefinitionWriter;
+use app\services\rules\BackgroundSkillsWriter;
+use app\services\rules\BackgroundFeatWriter;
+use app\services\rules\FeatDefinitionWriter;
+use app\services\rules\ItemDefinitionWriter;
+use app\services\rules\BackgroundToolWriter;
+use app\services\rules\BackgroundStartingEquipmentReader;
+use app\services\rules\BackgroundStartingEquipmentWriter;
+use app\services\rules\SpeciesDefinitionWriter;
+use app\services\rules\ClassDefinitionWriter;
+use app\models\catalog\ClassSkillsForm;
+use app\models\rules\{ClassSkillOption, RuleProfile};
+use app\services\rules\{ClassSkillsWriter, SkillOptions};
+use app\services\rules\CreationRules;
+use app\models\catalog\CreationRulesForm;
+
+class CatalogEntryApiController extends ApiController
+{
+
+    public function behaviors(): array
+    {
+
+        return [
+            'access' => [
+                'class' => AccessControl::class,
+                'rules' => [
+                    [
+                        'allow' => true,
+                        'roles' => ['manageCatalog'],
+                    ],
+                ],
+                'denyCallback' => function ($rule, $action) {
+                    if (Yii::$app->user->isGuest) {
+                        throw new \yii\web\UnauthorizedHttpException('Вы должны быть авторизованы! А вдруг вы кентавр?');
+                    } else {
+                        throw new \yii\web\ForbiddenHttpException('Не достаточно прав! Совсем как у кентавра!');
+                    }
+                },
+            ],
+            'verbs' => [
+                'class' => VerbFilter::class,
+                'actions' => [
+                    'index' => ['GET'],
+                    'view' => ['GET'],
+                    'create' => ['POST'],
+                    'publish' => ['POST'],
+                    'unpublish' => ['POST'],
+                    'update' => ['PATCH'],
+                    'types' => ['GET'],
+                    'ability-options' => ['GET'],
+                    'feat-categories' => ['GET'],
+                    'item-options' => ['GET'],
+                    'basic-rule-options' => ['GET'],
+                    'creation-rule-options' => ['GET'],
+                ],
+            ]
+        ];
+    }
+
+    public function actionIndex(): array
+    {
+        $pageInput = Yii::$app->request->get('page', '1');
+        $perPageInput = Yii::$app->request->get('per_page', '20');
+        $page = filter_var(
+            $pageInput,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+
+        $perPage = filter_var(
+            $perPageInput,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => 100]]
+        );
+
+        if ($page === false || $perPage === false) {
+            throw new \yii\web\BadRequestHttpException(
+                'page должен быть целым числом от 1, per_page — от 1 до 100.'
+            );
+        }
+
+        $query = CatalogEntry::find()
+            ->alias('entry')
+            ->innerJoin(
+                ['category' => CatalogEntryType::tableName()],
+                '[[category.code]] = [[entry.type]]'
+            )
+            ->select([
+                'entry.id',
+                'entry.type',
+                'entry.slug',
+                'entry.title',
+                'entry.body',
+                'entry.origin_profile_id',
+                'entry.source_id',
+                'entry.is_published',
+                'type_title' => 'category.title',
+            ]);
+
+        $total = (int) (clone $query)->count();
+
+        $pageCount = max(1, (int) ceil($total / $perPage));
+
+        if ($page > $pageCount) {
+            throw new \yii\web\NotFoundHttpException('Страница списка не найдена.');
+        }
+
+        $offset = ($page - 1) * $perPage;
+
+        $entries = $query
+            ->orderBy(['id' => SORT_DESC])
+            ->limit($perPage)
+            ->offset($offset)
+            ->asArray()
+            ->all();
+
+        return [
+            'data' => $entries,
+            'meta' => [
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'page_count' => $pageCount,
+            ],
+        ];
+    }
+
+    public function actionView(int $id): array
+    {
+        $entry = CatalogEntry::findOne($id);
+
+        if ($entry === null) {
+            throw new \yii\web\NotFoundHttpException('Запись не найдена');
+        }
+
+        return ['data' => $this->getEntryData($entry)];
+    }
+
+    public function actionCreate(): array
+    {
+        $data = Yii::$app->request->getBodyParams();
+
+        if (!is_array($data)) {
+            throw new \yii\web\BadRequestHttpException('Запрос не соответствует ожидаемой структуре');
+        }
+
+        $entry = new CatalogEntry();
+        $entry->load($data, '');
+
+        $saved = $this->saveEntry($entry, $data, true);
+
+        if ($saved === false) {
+            Yii::$app->response->setStatusCode(422);
+            return [
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'Проверьте поля формы.',
+                    'fields' => $entry->getErrors(),
+                ],
+            ];
+        }
+
+        Yii::$app->response->setStatusCode(201);
+
+        return ['data' => $this->getEntryData($entry)];
+    }
+
+    public function actionUpdate(int $id): array
+    {
+        return Yii::$app->db->transaction(function () use ($id): array {
+            Yii::$app->db->createCommand(
+                'SELECT [[id]] FROM {{%catalog_entry}} WHERE [[id]] = :id FOR UPDATE',
+                [':id' => $id]
+            )->queryScalar();
+
+            return $this->updateEntry($id);
+        });
+    }
+
+    private function updateEntry(int $id): array
+    {
+        $entry = CatalogEntry::findOne($id);
+
+        if ($entry === null) {
+            throw new \yii\web\NotFoundHttpException('Запись не найдена');
+        }
+
+        $data = Yii::$app->request->getBodyParams();
+
+        if (!is_array($data)) {
+            throw new \yii\web\BadRequestHttpException('Неверное тело запроса');
+        }
+
+        foreach (['title', 'body', 'source_id'] as $attribute) {
+            if (array_key_exists($attribute, $data)) {
+                $entry->$attribute = $data[$attribute];
+            }
+        }
+
+        $saved = $this->saveEntry($entry, $data, false);
+
+        if ($saved === false) {
+            Yii::$app->response->setStatusCode(422);
+            return [
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'Проверьте поля формы.',
+                    'fields' => $entry->getErrors(),
+                ],
+            ];
+        }
+
+        return ['data' => $this->getEntryData($entry)];
+    }
+
+    public function actionAbilityOptions(): array
+    {
+        return ['data' => AbilityDefinition::find()->select(['code', 'title'])
+            ->orderBy(['code' => SORT_ASC])->asArray()->all()];
+    }
+
+    public function actionFeatCategories(): array
+    {
+        return ['data' => FeatCategory::find()->select(['code', 'title'])
+            ->orderBy(['title' => SORT_ASC])->asArray()->all()];
+    }
+
+    public function actionItemOptions(): array
+    {
+        return ['data' => [
+            'item_kinds' => ItemKind::find()->select(['code', 'title'])->orderBy('title')->asArray()->all(),
+            'tool_kind_code' => ItemKind::TOOL,
+            'tool_groups' => ToolGroup::find()->select(['code', 'title'])->orderBy('title')->asArray()->all(),
+            'ability_options' => AbilityDefinition::find()->select(['code', 'title'])->orderBy('code')->asArray()->all(),
+        ]];
+    }
+
+    public function actionBasicRuleOptions(): array
+    {
+        $input = Yii::$app->request->get('origin_profile_id');
+        $profile = null;
+        if ($input !== null) {
+            $id = filter_var($input, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($id === false) throw new \yii\web\BadRequestHttpException('Профиль происхождения должен быть положительным целым числом.');
+            $profile = RuleProfile::find()->where('[[id]] = CAST(:id AS BIGINT)', [':id' => $id])->one();
+            if ($profile === null) throw new \yii\web\NotFoundHttpException('Профиль происхождения не найден.');
+        }
+        return ['data' => [
+            'skill_options' => (new SkillOptions())->get($profile),
+            'max_class_skill_options' => ClassSkillsForm::MAX_OPTIONS,
+            'hit_dice' => HitDieDefinition::find()->select(['sides', 'title'])->orderBy('sides')->asArray()->all(),
+            'ability_options' => AbilityDefinition::find()->select(['code', 'title'])->orderBy('code')->asArray()->all(),
+            'required_saving_throw_count' => ClassDefinitionForm::REQUIRED_SAVING_THROW_COUNT,
+            'max_speed_feet' => SpeciesDefinition::MAX_SPEED_FEET,
+        ]];
+    }
+
+    public function actionCreationRuleOptions(): array
+    {
+        $input = Yii::$app->request->get('origin_profile_id');
+        $profile = null;
+        if ($input !== null) {
+            $id = filter_var($input, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 2147483647]]);
+            if ($id === false) throw new \yii\web\BadRequestHttpException('Некорректный профиль происхождения.');
+            $profile = RuleProfile::findOne($id);
+            if ($profile === null) throw new \yii\web\NotFoundHttpException('Профиль не найден.');
+        }
+        return ['data' => (new CreationRules())->options($profile)];
+    }
+
+    private function getEntryData(CatalogEntry $entry): array
+    {
+        $data = $entry->getAttributes([
+            'id', 'type', 'slug', 'title', 'body', 'origin_profile_id', 'source_id', 'is_published',
+        ]);
+        if (in_array($entry->type, CreationRules::SOURCE_TYPES, true)) $data['creation_rules'] = (new CreationRules())->read($entry->id);
+        if ($entry->type === 'skill') {
+            $definition = SkillDefinition::findOne(['catalog_entry_id' => $entry->id]);
+            $data['skill_ability_code'] = $definition === null ? null : $definition->ability_code;
+        }
+        if ($entry->type === 'background') {
+            $data['skill_entry_ids'] = BackgroundSkillProficiency::find()->select('skill_entry_id')
+                ->where(['background_entry_id' => $entry->id])->orderBy(['skill_entry_id' => SORT_ASC])->column();
+            $link = BackgroundFeat::findOne(['background_entry_id' => $entry->id]);
+            $data['feat_entry_id'] = $link === null ? null : $link->feat_entry_id;
+            $tool = BackgroundToolProficiency::findOne($entry->id);
+            $data['background_tool'] = $tool === null ? null : $tool->getAttributes(['tool_entry_id', 'tool_group_code']);
+            $data['starting_equipment'] = (new BackgroundStartingEquipmentReader())->get($entry);
+        }
+        if ($entry->type === 'feat') {
+            $definition = FeatDefinition::findOne(['catalog_entry_id' => $entry->id]);
+            $data['feat_category_code'] = $definition === null ? null : $definition->category_code;
+        }
+        if ($entry->type === 'item') {
+            $item = ItemDefinition::findOne($entry->id);
+            $tool = ToolDefinition::findOne($entry->id);
+            $data['item_kind_code'] = $item === null ? null : $item->kind_code;
+            $data['tool_group_code'] = $tool === null ? null : $tool->group_code;
+            $data['tool_ability_code'] = $tool === null ? null : $tool->ability_code;
+        }
+        if ($entry->type === 'species') {
+            $definition = SpeciesDefinition::findOne($entry->id);
+            $data['species_speed_feet'] = $definition === null ? null : $definition->speed_feet;
+        }
+        if ($entry->type === 'class') {
+            $definition = ClassDefinition::findOne($entry->id);
+            $data['class_hit_die_sides'] = $definition === null ? null : $definition->hit_die_sides;
+            $data['class_skill_choice_count'] = $definition === null ? null : $definition->skill_choice_count;
+            $data['class_skill_entry_ids'] = ClassSkillOption::find()->select('skill_entry_id')
+                ->where(['class_entry_id' => $entry->id])->orderBy('skill_entry_id')->column();
+            $data['class_saving_throw_codes'] = ClassSavingThrowProficiency::find()->select('ability_code')
+                ->where(['class_entry_id' => $entry->id])->orderBy('ability_code')->column();
+        }
+        return $data;
+    }
+
+    private function saveEntry(CatalogEntry $entry, array $data, bool $creating): bool
+    {
+        return Yii::$app->db->transaction(function () use ($entry, $data, $creating): bool {
+            return $this->validateAndSaveEntry($entry, $data, $creating);
+        });
+    }
+
+    private function validateAndSaveEntry(CatalogEntry $entry, array $data, bool $creating): bool
+    {
+        $form = null;
+        $skillForm = null;
+        $backgroundSkillsForm = null;
+        $featForm = null;
+        $backgroundFeatForm = null;
+        $itemForm = null;
+        $backgroundToolForm = null;
+        $equipmentForm = null;
+        $speciesForm = null;
+        $classForm = null;
+        $classSkillsForm = null;
+        $creationForm = null;
+        $hasCodes = array_key_exists('ability_codes', $data);
+        $valid = $entry->validate();
+
+        if ($entry->type === 'background' && ($creating || $hasCodes)) {
+            $form = new BackgroundAbilityOptionsForm();
+            $form->ability_codes = $data['ability_codes'] ?? null;
+            if (!$form->validate()) {
+                $entry->addErrors($form->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasCodes) {
+            $entry->addError('ability_codes', 'Характеристики предыстории доступны только для категории background.');
+            $valid = false;
+        }
+
+        $hasSkillAbility = array_key_exists('skill_ability_code', $data);
+        if ($entry->type === 'skill' && ($creating || $hasSkillAbility)) {
+            $skillForm = new SkillDefinitionForm();
+            $skillForm->skill_ability_code = $data['skill_ability_code'] ?? null;
+            if (!$skillForm->validate()) {
+                $entry->addErrors($skillForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasSkillAbility) {
+            $entry->addError('skill_ability_code', 'Характеристика навыка доступна только для категории skill.');
+            $valid = false;
+        }
+
+        $hasSkillIds = array_key_exists('skill_entry_ids', $data);
+        if ($entry->type === 'background' && ($creating || $hasSkillIds)) {
+            $backgroundSkillsForm = new BackgroundSkillsForm();
+            $backgroundSkillsForm->originProfileId = $entry->hasErrors('origin_profile_id')
+                ? null : (int) $entry->origin_profile_id;
+            $backgroundSkillsForm->skill_entry_ids = $data['skill_entry_ids'] ?? null;
+            if (!$backgroundSkillsForm->validate()) {
+                $entry->addErrors($backgroundSkillsForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasSkillIds) {
+            $entry->addError('skill_entry_ids', 'Выдаваемые навыки доступны только для категории background.');
+            $valid = false;
+        }
+
+        $hasFeatCategory = array_key_exists('feat_category_code', $data);
+        if ($entry->type === 'feat' && ($creating || $hasFeatCategory)) {
+            $featForm = new FeatDefinitionForm();
+            $featForm->catalogEntryId = $creating ? null : $entry->id;
+            $featForm->feat_category_code = $data['feat_category_code'] ?? null;
+            if (!$featForm->validate()) {
+                $entry->addErrors($featForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasFeatCategory) {
+            $entry->addError('feat_category_code', 'Категория черты доступна только для записи feat.');
+            $valid = false;
+        }
+
+        $hasFeatId = array_key_exists('feat_entry_id', $data);
+        if ($entry->type === 'background' && ($creating || $hasFeatId)) {
+            $backgroundFeatForm = new BackgroundFeatForm();
+            $backgroundFeatForm->originProfileId = $entry->hasErrors('origin_profile_id')
+                ? null : (int) $entry->origin_profile_id;
+            $backgroundFeatForm->feat_entry_id = $data['feat_entry_id'] ?? null;
+            if (!$backgroundFeatForm->validate()) {
+                $entry->addErrors($backgroundFeatForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasFeatId) {
+            $entry->addError('feat_entry_id', 'Выдаваемая черта доступна только для предыстории.');
+            $valid = false;
+        }
+
+        $itemFields = ['item_kind_code', 'tool_group_code', 'tool_ability_code'];
+        $hasItemFields = count(array_intersect_key($data, array_flip($itemFields))) > 0;
+        if ($entry->type === 'item' && ($creating || $hasItemFields)) {
+            $item = $creating ? null : ItemDefinition::findOne($entry->id);
+            $tool = $creating ? null : ToolDefinition::findOne($entry->id);
+            $kind = array_key_exists('item_kind_code', $data) ? $data['item_kind_code'] : ($item === null ? null : $item->kind_code);
+            $previous = [
+                'item_kind_code' => $item === null ? null : $item->kind_code,
+                'tool_group_code' => $kind !== ItemKind::TOOL || $tool === null ? null : $tool->group_code,
+                'tool_ability_code' => $kind !== ItemKind::TOOL || $tool === null ? null : $tool->ability_code,
+            ];
+            $itemForm = new ItemDefinitionForm();
+            $itemForm->catalogEntryId = $creating ? null : $entry->id;
+            foreach ($itemFields as $field) {
+                $itemForm->$field = array_key_exists($field, $data) ? $data[$field] : $previous[$field];
+            }
+            if (!$itemForm->validate()) {
+                $entry->addErrors($itemForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasItemFields) {
+            $entry->addError('item_kind_code', 'Свойства предмета доступны только для категории item.');
+            $valid = false;
+        }
+
+        $hasBackgroundTool = array_key_exists('background_tool', $data);
+        if ($entry->type === 'background' && ($creating || $hasBackgroundTool)) {
+            $backgroundToolForm = new BackgroundToolForm();
+            $backgroundToolForm->originProfileId = $entry->hasErrors('origin_profile_id')
+                ? null : (int) $entry->origin_profile_id;
+            $backgroundToolForm->background_tool = $data['background_tool'] ?? null;
+            if (!$backgroundToolForm->validate()) {
+                $entry->addErrors($backgroundToolForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasBackgroundTool) {
+            $entry->addError('background_tool', 'Правило владения инструментом доступно только для предыстории.');
+            $valid = false;
+        }
+
+        $hasEquipment = array_key_exists('starting_equipment', $data);
+        if ($entry->type === 'background' && ($creating || $hasEquipment)) {
+            $equipmentForm = new BackgroundStartingEquipmentForm();
+            $equipmentForm->originProfileId = $entry->hasErrors('origin_profile_id') ? null : (int) $entry->origin_profile_id;
+            $equipmentForm->backgroundToolConfigured = $backgroundToolForm !== null
+                ? !$backgroundToolForm->hasErrors()
+                : BackgroundToolProficiency::find()->where(['background_entry_id' => $entry->id])->exists();
+            $equipmentForm->starting_equipment = $data['starting_equipment'] ?? null;
+            if (!$equipmentForm->validate()) {
+                $entry->addErrors($equipmentForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasEquipment) {
+            $entry->addError('starting_equipment', 'Стартовый комплект доступен только для предыстории.');
+            $valid = false;
+        }
+
+        $hasSpeed = array_key_exists('species_speed_feet', $data);
+        if ($entry->type === 'species' && ($creating || $hasSpeed)) {
+            $speciesForm = new SpeciesDefinitionForm();
+            $speciesForm->species_speed_feet = $data['species_speed_feet'] ?? null;
+            if (!$speciesForm->validate()) {
+                $entry->addErrors($speciesForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasSpeed) {
+            $entry->addError('species_speed_feet', 'Базовая скорость вида доступна только для категории species.');
+            $valid = false;
+        }
+        $classFields = ['class_hit_die_sides', 'class_saving_throw_codes'];
+        $hasClassFields = count(array_intersect_key($data, array_flip($classFields))) > 0;
+        if ($entry->type === 'class' && ($creating || $hasClassFields)) {
+            $definition = $creating ? null : ClassDefinition::findOne($entry->id);
+            $previous = [
+                'class_hit_die_sides' => $definition === null ? null : $definition->hit_die_sides,
+                'class_saving_throw_codes' => $creating ? [] : ClassSavingThrowProficiency::find()->select('ability_code')
+                    ->where(['class_entry_id' => $entry->id])->orderBy('ability_code')->column(),
+            ];
+            $classForm = new ClassDefinitionForm();
+            foreach ($classFields as $field) {
+                $classForm->$field = array_key_exists($field, $data) ? $data[$field] : $previous[$field];
+            }
+            if (!$classForm->validate()) {
+                $entry->addErrors($classForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasClassFields) {
+            $entry->addError('class_hit_die_sides', 'Базовые свойства класса доступны только для категории class.');
+            $valid = false;
+        }
+
+        $skillFields = ['class_skill_choice_count', 'class_skill_entry_ids'];
+        $hasClassSkills = count(array_intersect_key($data, array_flip($skillFields))) > 0;
+        if ($entry->type === 'class' && ($creating || $hasClassSkills)) {
+            $definition = $creating ? null : ClassDefinition::findOne($entry->id);
+            $previous = [
+                'class_skill_choice_count' => $definition === null ? null : $definition->skill_choice_count,
+                'class_skill_entry_ids' => $creating ? [] : ClassSkillOption::find()->select('skill_entry_id')
+                    ->where(['class_entry_id' => $entry->id])->orderBy('skill_entry_id')->column(),
+            ];
+            $classSkillsForm = new ClassSkillsForm();
+            if (!$creating && $definition === null && $classForm === null) {
+                $entry->addError('class_hit_die_sides', 'Для старого класса заполните также кость хитов и спасброски.');
+                $valid = false;
+            }
+            $classSkillsForm->originProfileId = $entry->origin_profile_id;
+            foreach ($skillFields as $field) {
+                $classSkillsForm->$field = array_key_exists($field, $data) ? $data[$field] : $previous[$field];
+            }
+            if (!$classSkillsForm->validate()) {
+                $entry->addErrors($classSkillsForm->getErrors());
+                $valid = false;
+            }
+        } elseif ($hasClassSkills) {
+            $entry->addError('class_skill_entry_ids', 'Выборы навыков класса доступны только для категории class.');
+            $valid = false;
+        }
+
+        $hasCreationRules = array_key_exists('creation_rules', $data);
+        if (in_array($entry->type, CreationRules::SOURCE_TYPES, true) && ($creating || $hasCreationRules)) {
+            $creationForm = new CreationRulesForm();
+            $creationForm->sourceId = $creating ? null : $entry->id;
+            $creationForm->originProfileId = $entry->origin_profile_id;
+            $creationForm->creation_rules = $hasCreationRules ? $data['creation_rules'] : ['grants' => [], 'choices' => []];
+            if (!$creationForm->validate()) { $entry->addErrors($creationForm->getErrors()); $valid = false; }
+        } elseif ($hasCreationRules) { $entry->addError('creation_rules', 'Эта категория не может задавать выдачи при создании.'); $valid = false; }
+
+        if (!$valid) {
+            return false;
+        }
+
+        if (!$entry->save(false)) {
+            throw new \RuntimeException('Не удалось сохранить запись архива.');
+        }
+        if ($form !== null) {
+            (new BackgroundAbilityOptionsWriter())->save($entry, $form->ability_codes);
+        }
+        if ($skillForm !== null) {
+            (new SkillDefinitionWriter())->save($entry, $skillForm->skill_ability_code);
+        }
+        if ($backgroundSkillsForm !== null) {
+            (new BackgroundSkillsWriter())->save($entry, $backgroundSkillsForm->skill_entry_ids);
+        }
+        if ($featForm !== null) {
+            (new FeatDefinitionWriter())->save($entry, $featForm->feat_category_code);
+        }
+        if ($backgroundFeatForm !== null) {
+            (new BackgroundFeatWriter())->save($entry, $backgroundFeatForm->feat_entry_id);
+        }
+        if ($itemForm !== null) {
+            (new ItemDefinitionWriter())->save($entry, $itemForm->item_kind_code, $itemForm->tool_group_code, $itemForm->tool_ability_code);
+        }
+        if ($backgroundToolForm !== null) {
+            (new BackgroundToolWriter())->save($entry, $backgroundToolForm->background_tool);
+        }
+        if ($equipmentForm !== null) {
+            (new BackgroundStartingEquipmentWriter())->save($entry, $equipmentForm->starting_equipment);
+        }
+        if ($speciesForm !== null) {
+            (new SpeciesDefinitionWriter())->save($entry, $speciesForm->species_speed_feet);
+        }
+        if ($classForm !== null) {
+            (new ClassDefinitionWriter())->save($entry, $classForm->class_hit_die_sides, $classForm->class_saving_throw_codes);
+        }
+        if ($classSkillsForm !== null) {
+            (new ClassSkillsWriter())->save($entry, $classSkillsForm->class_skill_choice_count, $classSkillsForm->class_skill_entry_ids);
+        }
+        if ($creationForm !== null) (new CreationRules())->save($entry, $creationForm->creation_rules);
+        return true;
+    }
+
+    public function actionPublish(int $id): array
+    {
+        $entry = CatalogEntry::findOne($id);
+
+        if ($entry === null) {
+            throw new \yii\web\NotFoundHttpException('Запись не найдена');
+        }
+
+        $entry->is_published = true;
+
+        $saved = $entry->save();
+
+        if ($saved === false) {
+            Yii::$app->response->setStatusCode(422);
+            return [
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'Проверьте поля формы.',
+                    'fields' => $entry->getErrors(),
+                ],
+            ];
+        }
+
+        return [
+            'data' => $entry->getAttributes([
+                'id',
+                'type',
+                'slug',
+                'title',
+                'body',
+                'origin_profile_id',
+                'source_id',
+                'is_published',
+            ]),
+        ];
+    }
+
+    public function actionUnpublish(int $id): array
+    {
+        $entry = CatalogEntry::findOne($id);
+
+        if ($entry === null) {
+            throw new \yii\web\NotFoundHttpException('Запись не найдена');
+        }
+
+        $entry->is_published = false;
+
+        $saved = $entry->save();
+
+        if ($saved === false) {
+            Yii::$app->response->setStatusCode(422);
+            return [
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'Проверьте поля формы.',
+                    'fields' => $entry->getErrors(),
+                ],
+            ];
+        }
+
+        return [
+            'data' => $entry->getAttributes([
+                'id',
+                'type',
+                'slug',
+                'title',
+                'body',
+                'origin_profile_id',
+                'source_id',
+                'is_published',
+            ]),
+        ];
+    }
+
+    public function actionTypes(): array
+    {
+        $types = CatalogEntryType::find()
+            ->select(['code', 'title'])
+            ->orderBy(['code' => SORT_ASC])
+            ->asArray()
+            ->all();
+
+        return ['data' => $types];
+    }
+}

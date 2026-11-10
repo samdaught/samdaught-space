@@ -1,0 +1,64 @@
+<?php
+
+$params = require __DIR__ . '/params.php';
+$db = require __DIR__ . '/db.php';
+
+$config = [
+    'id' => 'basic-console',
+    'basePath' => dirname(__DIR__),
+    'bootstrap' => ['log'],
+    'controllerNamespace' => 'app\commands',
+    'controllerMap' => [
+        'migrate' => [
+            'class' => \yii\console\controllers\MigrateController::class,
+            'migrationPath' => [
+                '@yii/rbac/migrations',
+                '@app/migrations',
+            ],
+        ],
+    ],
+    'aliases' => [
+        '@bower' => '@vendor/bower-asset',
+        '@npm'   => '@vendor/npm-asset',
+        '@tests' => '@app/tests',
+    ],
+    'components' => [
+        'cache' => [
+            'class' => \yii\caching\FileCache::class,
+        ],
+        'log' => [
+            'targets' => [
+                [
+                    'class' => \app\helpers\DiagnosticLogTarget::class,
+                    'logVars' => [],
+                    'prefix' => [\app\helpers\Diagnostics::class, 'prefix'],
+                    'maxFileSize' => 10240,
+                    'maxLogFiles' => 10,
+                    'levels' => ['error', 'warning'],
+                ],
+            ],
+        ],
+        'db' => $db,
+        'authManager' => [
+            'class' => 'yii\rbac\DbManager',
+        ],
+    ],
+    'params' => $params,
+
+];
+
+if (YII_ENV_DEV) {
+
+    $config['bootstrap'][] = 'gii';
+    $config['modules']['gii'] = [
+        'class' => \yii\gii\Module::class,
+    ];
+
+    $config['bootstrap'][] = 'debug';
+    $config['modules']['debug'] = [
+        'class' => \yii\debug\Module::class,
+
+    ];
+}
+
+return $config;

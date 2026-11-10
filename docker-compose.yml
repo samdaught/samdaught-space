@@ -1,0 +1,42 @@
+services:
+  php:
+    image: yiisoftware/yii2-php:8.5-apache-latest
+    restart: unless-stopped
+    volumes:
+      - ~/.composer-docker/cache:/root/.composer/cache:delegated
+      - ./:/app:delegated
+    ports:
+      - "8000:80"
+    environment:
+      YII_ENV: "${YII_ENV:-dev}"
+      YII_DEBUG: "${YII_DEBUG:-}"
+      COOKIE_KEY: ${COOKIE_KEY:?COOKIE_KEY must be set}
+      INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-}
+      DB_NAME: ${DB_NAME:-dbname}
+      DB_USER: ${DB_USER:-dbuser}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'if [ "$(stat -c ''%U'' /app/runtime)" != ''www-data'' ] || [ "$(stat -c ''%U'' /app/web/assets)" != ''www-data'' ]; then chown -R www-data:www-data /app/runtime /app/web/assets && chmod -R ug+rwX /app/runtime /app/web/assets; fi && runuser -u www-data -- touch /app/runtime/test_write && rm /app/runtime/test_write && exit 0 || exit 1',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-dbname}
+      POSTGRES_USER: ${DB_USER:-dbuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT}:5432"
+
+volumes:
+  pgdata:

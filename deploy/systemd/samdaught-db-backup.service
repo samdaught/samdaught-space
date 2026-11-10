@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up the samdaught.space PostgreSQL database
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/samdaught-space
+ExecStart=/bin/sh /opt/samdaught-space/scripts/backup-db.sh
+UMask=0077
+TimeoutStartSec=15min

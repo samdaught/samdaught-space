@@ -1,0 +1,112 @@
+name: samdaught-space-prod
+
+services:
+  php:
+    image: ${APP_IMAGE:?Set APP_IMAGE to the prepared application image}
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: 768m
+    pids_limit: 128
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      YII_ENV: "prod"
+      YII_DEBUG: "false"
+      PHP_ENABLE_XDEBUG: "0"
+      PHP_USER_ID: "0"
+      COOKIE_KEY: ${COOKIE_KEY:?Set a separate production COOKIE_KEY}
+      INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:?Set the first site administrator login}
+      DB_NAME: ${DB_NAME:?Set DB_NAME}
+      DB_USER: ${DB_USER:?Set the application DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?Set the application DB_PASSWORD}
+    volumes:
+      - runtime:/app/runtime
+      - assets:/app/web/assets
+      - letsencrypt:/etc/letsencrypt:ro
+      - acme_challenge:/var/www/certbot:ro
+    networks:
+      - web
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 80) === false ? 1 : 0);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+    restart: unless-stopped
+    mem_limit: 512m
+    shm_size: 128m
+    stop_grace_period: 60s
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=30"]
+    environment:
+      POSTGRES_DB: ${DB_NAME:?Set DB_NAME}
+      POSTGRES_USER: ${DB_ADMIN_USER:?Set the database administrator role}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?Set the database administrator password}
+      APP_DB_USER: ${DB_USER:?Set the application DB_USER}
+      APP_DB_PASSWORD: ${DB_PASSWORD:?Set the application DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - type: bind
+        source: ./docker/postgres-init-app.sh
+        target: /docker-entrypoint-initdb.d/10-app-role.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  certbot:
+    image: certbot/certbot@sha256:bc93cb710b413e6b456d622f9b0133b3e109c0a78c2ed9976af43d209b0a1805
+    profiles: ["tools"]
+    mem_limit: 256m
+    pids_limit: 64
+    environment:
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - acme_challenge:/var/www/certbot
+    tmpfs:
+      - /var/lib/letsencrypt:size=32m
+      - /var/log/letsencrypt:size=16m
+    networks:
+      - web
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
+  runtime:
+  assets:
+  letsencrypt:
+  acme_challenge:
+
+networks:
+  web:
+  database:
+    internal: true

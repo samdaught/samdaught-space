@@ -1,0 +1,11 @@
+---
+actor: AcceptanceTester
+modules:
+  enabled:
+    - PhpBrowser:
+        url: http://localhost
+    - Yii2:
+        part: orm
+        entryScript: index-test.php
+        cleanup: false
+step_decorators: ~
