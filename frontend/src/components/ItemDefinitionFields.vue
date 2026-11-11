@@ -39,9 +39,12 @@ const fields = defineModel<ItemDefinitionDraft>({ required: true })
         </option>
       </select>
     </label>
-    <p v-if="fields.item_kind_code !== '' && fields.item_kind_code !== options.tool_kind_code">
-      Свойства этого предмета пока указываются в описании. Автоматические расчёты оружия, брони и
-      расходников ещё не подключены.
+    <p v-if="['weapon', 'armor', 'shield'].includes(fields.item_kind_code)">
+      После выбора вида заполните ниже боевые свойства: урон или КД, вес, стоимость и при необходимости
+      магические свойства.
+    </p>
+    <p v-else-if="fields.item_kind_code !== ''">
+      Ниже можно указать вес, стоимость и магические свойства предмета.
     </p>
   </fieldset>
 </template>

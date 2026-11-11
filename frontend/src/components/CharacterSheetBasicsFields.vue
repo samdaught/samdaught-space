@@ -15,11 +15,11 @@ function signed(value: number | null): string {
   <ul aria-label="Границы расчёта">
     <li v-for="limitation in data.limitations" :key="limitation">{{ limitation }}</li>
   </ul>
-  <template v-if="data.calculation_supported">
+  <template>
     <dl>
       <dt>Бонус мастерства</dt>
       <dd>{{ signed(data.proficiency_bonus) }}</dd>
-      <dt>Максимальные хиты первого уровня</dt>
+      <dt>Максимальные хиты</dt>
       <dd>{{ data.hit_point_max ?? 'Не рассчитаны' }}</dd>
       <dt>Бонус максимальных хитов от архивных выдач</dt>
       <dd>{{ signed(data.hit_point_bonus) }}</dd>
@@ -63,7 +63,7 @@ function signed(value: number | null): string {
     </div>
     <h3>Навыки и владения</h3>
     <p v-if="data.skills.length === 0">
-      В профиле нет доступных опубликованных навыков с определением.
+      В этом мире нет доступных опубликованных навыков с определением.
     </p>
     <div v-else class="table-scroll" role="region" aria-label="Расчёт листа персонажа" tabindex="0">
       <table>

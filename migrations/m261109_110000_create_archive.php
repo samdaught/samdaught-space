@@ -10,37 +10,16 @@ class m261109_110000_create_archive extends Migration
             'id' => $this->primaryKey(),
             'code' => $this->string(32)->notNull()->unique(),
             'title' => $this->string(100)->notNull(),
-            'base_profile_id' => $this->integer(),
         ]);
-
-        $this->addForeignKey(
-            'fk_rule_profile_base_profile_id',
-            '{{%rule_profile}}',
-            'base_profile_id',
-            '{{%rule_profile}}',
-            'id',
-            'RESTRICT'
-        );
 
         $this->insert('{{%rule_profile}}', [
             'code' => 'standard_2024',
             'title' => 'Стандарт 2024',
         ]);
 
-        $standardId = (new \yii\db\Query())
-            ->select('id')
-            ->from('{{%rule_profile}}')
-            ->where(['code' => 'standard_2024'])
-            ->scalar($this->db);
-
-        if ($standardId === false) {
-            throw new \RuntimeException('Стандартный профиль не найден после вставки.');
-        }
-
         $this->insert('{{%rule_profile}}', [
             'code' => 'my_world_2024',
             'title' => 'Забытый край',
-            'base_profile_id' => $standardId,
         ]);
 
         $this->createTable('{{%content_source}}', [
@@ -80,15 +59,15 @@ class m261109_110000_create_archive extends Migration
             'slug' => $this->string(100)->notNull(),
             'title' => $this->string(255)->notNull(),
             'body' => $this->text(),
-            'origin_profile_id' => $this->integer()->notNull(),
+            'rule_profile_id' => $this->integer()->notNull(),
             'source_id' => $this->integer(),
             'is_published' => $this->boolean()->notNull()->defaultValue(false),
         ]);
 
         $this->createIndex(
-            'ux_catalog_entry_type_slug',
+            'ux_catalog_entry_profile_type_slug',
             '{{%catalog_entry}}',
-            ['type', 'slug'],
+            ['rule_profile_id', 'type', 'slug'],
             true
         );
 
@@ -103,9 +82,9 @@ class m261109_110000_create_archive extends Migration
         );
 
         $this->addForeignKey(
-            'fk_catalog_entry_origin_profile_id',
+            'fk_catalog_entry_rule_profile_id',
             '{{%catalog_entry}}',
-            'origin_profile_id',
+            'rule_profile_id',
             '{{%rule_profile}}',
             'id',
             'RESTRICT',
@@ -119,38 +98,6 @@ class m261109_110000_create_archive extends Migration
             '{{%content_source}}',
             'id',
             'RESTRICT',
-            'RESTRICT'
-        );
-
-        $this->createTable('{{%profile_entry_override}}', [
-            'id' => $this->primaryKey(),
-            'profile_id' => $this->integer()->notNull(),
-            'catalog_entry_id' => $this->integer()->notNull(),
-            'is_allowed' => $this->boolean()->notNull(),
-        ]);
-
-        $this->createIndex(
-            'ux_profile_entry_override_profile_entry',
-            '{{%profile_entry_override}}',
-            ['profile_id', 'catalog_entry_id'],
-            true
-        );
-
-        $this->addForeignKey(
-            'fk_profile_entry_override_profile_id',
-            '{{%profile_entry_override}}',
-            'profile_id',
-            '{{%rule_profile}}',
-            'id',
-            'RESTRICT'
-        );
-
-        $this->addForeignKey(
-            'fk_profile_entry_override_catalog_entry_id',
-            '{{%profile_entry_override}}',
-            'catalog_entry_id',
-            '{{%catalog_entry}}',
-            'id',
             'RESTRICT'
         );
 
@@ -173,7 +120,6 @@ class m261109_110000_create_archive extends Migration
     public function safeDown()
     {
         $this->dropTable('{{%ability_definition}}');
-        $this->dropTable('{{%profile_entry_override}}');
         $this->dropTable('{{%catalog_entry}}');
         $this->dropTable('{{%catalog_entry_type}}');
         $this->dropTable('{{%content_source}}');

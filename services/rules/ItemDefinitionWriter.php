@@ -27,6 +27,14 @@ class ItemDefinitionWriter
             if (!$item->save()) {
                 throw new \RuntimeException('Не удалось сохранить вид предмета.');
             }
+            $db = Yii::$app->db;
+            if ($kind !== 'weapon') {
+                $db->createCommand()->delete('{{%weapon_property}}', ['item_entry_id' => $entry->id])->execute();
+                $db->createCommand()->delete('{{%weapon_definition}}', ['catalog_entry_id' => $entry->id])->execute();
+            }
+            if (!in_array($kind, ['armor', 'shield'], true)) {
+                $db->createCommand()->delete('{{%armor_definition}}', ['catalog_entry_id' => $entry->id])->execute();
+            }
             if ($kind !== ItemKind::TOOL) {
                 ToolDefinition::deleteAll(['catalog_entry_id' => $entry->id]);
                 return;

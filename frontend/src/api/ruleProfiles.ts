@@ -12,7 +12,7 @@ export async function getRuleProfiles(): Promise<RuleProfile[]> {
   const response = await fetch('/api/v1/rule-profiles')
 
   if (!response.ok) {
-    throw new Error('Не удалось загрузить профили. HTTP ' + response.status)
+    throw new Error('Не удалось загрузить миры. HTTP ' + response.status)
   }
 
   const result = (await response.json()) as RuleProfilesResponse

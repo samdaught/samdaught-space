@@ -46,7 +46,7 @@ function formatMoney(cp: number): string {
     рассчитываются автоматически после сохранения.
   </p>
   <p v-if="data.item_options.length === 0">
-    В этом профиле нет доступных опубликованных предметов.
+    В этом мире нет доступных опубликованных предметов.
   </p>
   <div v-for="(item, index) in items" :key="item.id ?? 'new-' + index" class="inventory-line">
     <label>

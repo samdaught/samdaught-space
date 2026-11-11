@@ -11,7 +11,7 @@ use yii\base\Model;
 class BackgroundStartingEquipmentForm extends Model
 {
     public $starting_equipment = null;
-    public ?int $originProfileId = null;
+    public ?int $ruleProfileId = null;
     public bool $backgroundToolConfigured = false;
 
     public function rules(): array
@@ -59,7 +59,7 @@ class BackgroundStartingEquipmentForm extends Model
             $this->addError($attribute, 'Предмет повторяется: объедините количество в одной строке.');
             return;
         }
-        $profile = $this->originProfileId === null ? null : RuleProfile::findOne($this->originProfileId);
+        $profile = $this->ruleProfileId === null ? null : RuleProfile::findOne($this->ruleProfileId);
         if ($profile === null) {
             $this->addError($attribute, 'Выберите корректный профиль происхождения предыстории.');
             return;

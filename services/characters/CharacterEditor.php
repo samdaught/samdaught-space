@@ -74,9 +74,6 @@ class CharacterEditor
         if (!is_int($data['revision']) || $data['revision'] < 0 || $data['revision'] >= 2147483647) {
             throw new BadRequestHttpException('revision должна быть целым числом от 0 до 2147483646.');
         }
-        if ($id === null && $data['target_level'] !== 1) {
-            throw new CharacterEditorValidationException(['target_level' => ['В первой версии новый персонаж создаётся только на первом уровне.']]);
-        }
         if (!is_bool($data['finish'])) throw new BadRequestHttpException('finish должен быть логическим значением.');
         return Yii::$app->db->transaction(function () use ($data, $userId, $id): array {
             $character = $id === null ? new Character() : $this->findOwned($id, $userId, true);
@@ -209,10 +206,9 @@ class CharacterEditor
     {
         $state = $this->sections($character);
         $state['character'] = $character->getAttributes(['id', 'name', 'user_id', 'rule_profile_id', 'target_level', 'species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id', 'status', 'revision', 'finished_at']);
-        $state['sheet_basics'] = (new FirstLevelCharacterSheet())->get($character, $state['creation']);
+        $state['sheet_basics'] = (new CharacterSheetCalculator())->get($character, $state['creation']);
         $state['sheet_details'] = array_replace(SheetDetailsForm::defaults(), array_intersect_key($this->jsonData('character_sheet_details', $character->id) ?? [], SheetDetailsForm::defaults()));
         $issues = [];
-        if ($character->target_level !== 1) $issues[] = 'Первая версия поддерживает завершение персонажа первого уровня.';
         if (!$state['sheet_basics']['baseline_complete']) $issues[] = 'Полностью заполните вид, класс, базовые характеристики, увеличения предыстории и навыки класса.';
         if (!$state['benefits']['complete']) $issues[] = 'Завершите выборы предыстории: навыки, черта, инструмент и снаряжение должны быть доступны.';
         if (!$state['creation']['complete']) $issues = array_merge($issues, ['Завершите все архивные выдачи и группы выбора вида, класса и черт.'], $state['creation']['issues']);

@@ -240,14 +240,6 @@ watch(
         </li>
       </ul>
     </section>
-    <section v-if="state.creation.spellcasting?.enabled">
-      <h2>Заклинательство</h2>
-      <p>Ячейки первого круга: {{ state.creation.spellcasting.slot_count }}</p>
-      <p>
-        Атака {{ state.sheet_basics.spell_attack_bonus ?? '—' }} · СЛ
-        {{ state.sheet_basics.spell_save_dc ?? '—' }}
-      </p>
-    </section>
     <section v-if="state.sheet_basics.traits?.length">
       <h2>Владения и свойства</h2>
       <ul>

@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import RuleField from '../../components/RuleField.vue'
 import SpeciesEditorFields from '../../components/SpeciesEditorFields.vue'
 import ClassEditorFields from '../../components/ClassEditorFields.vue'
 import SpellEditorFields from '../../components/SpellEditorFields.vue'
 import { emptySpeciesCard } from '../../api/speciesCard'
 import { emptyClassCard } from '../../api/classCard'
-import { rulebookSchema } from '../../api/rulebook'
 import { useRulebook } from '../../composables/useRulebook'
 import EntryMechanicsFields from '../../components/EntryMechanicsFields.vue'
+import ItemRuleFields from '../../components/ItemRuleFields.vue'
 import { useEntryMechanics } from '../../composables/useEntryMechanics'
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -71,7 +70,7 @@ const optionsLoading = ref(true)
 const optionsError = ref('')
 const entryTypes = ref<CatalogEntryType[]>([])
 const sourceOptions = ref<ContentSourceOption[]>([])
-const originProfileId = ref<number | null>(null)
+const ruleProfileId = ref<number | null>(null)
 const sourceId = ref<number | null>(null)
 const saving = ref(false)
 const submitError = ref('')
@@ -111,16 +110,16 @@ const basicRuleFields = ref<BasicRuleDraft>({
 const basicRulesLoading = ref(false)
 const basicRulesError = ref('')
 const creation = useCreationRuleFields(
-  () => originProfileId.value,
+  () => ruleProfileId.value,
   () => form.value.type,
 )
 
 const mechanics = useEntryMechanics(
-  () => originProfileId.value,
+  () => ruleProfileId.value,
   () => form.value.type,
 )
 const rulebook = useRulebook(
-  () => originProfileId.value,
+  () => ruleProfileId.value,
   () => form.value.type,
 )
 
@@ -141,7 +140,7 @@ const changes = useFormChanges(
     creation.fields.value,
     mechanics.fields.value,
     rulebook.fields.value,
-    originProfileId.value,
+    ruleProfileId.value,
     sourceId.value,
   ],
   () => saving.value,
@@ -151,10 +150,10 @@ async function loadBasicRuleOptions(): Promise<void> {
   if (basicRulesLoading.value || saving.value) return
   basicRulesLoading.value = true
   basicRulesError.value = ''
-  const requestedProfileId = originProfileId.value
+  const requestedProfileId = ruleProfileId.value
   try {
     const options = await getBasicRuleOptions(requestedProfileId)
-    if (requestedProfileId !== originProfileId.value) return
+    if (requestedProfileId !== ruleProfileId.value) return
     basicRuleOptions.value = options
     const codes = basicRuleFields.value.class_saving_throw_codes
     basicRuleFields.value.class_saving_throw_codes = Array.from(
@@ -162,7 +161,7 @@ async function loadBasicRuleOptions(): Promise<void> {
       (_, index) => codes[index] ?? '',
     )
   } catch (cause) {
-    if (requestedProfileId === originProfileId.value)
+    if (requestedProfileId === ruleProfileId.value)
       basicRulesError.value =
         cause instanceof Error
           ? cause.message
@@ -170,7 +169,7 @@ async function loadBasicRuleOptions(): Promise<void> {
   } finally {
     basicRulesLoading.value = false
     if (
-      requestedProfileId !== originProfileId.value &&
+      requestedProfileId !== ruleProfileId.value &&
       (form.value.type === 'species' || form.value.type === 'class')
     )
       void loadBasicRuleOptions()
@@ -220,12 +219,12 @@ async function loadSkillAbilityOptions(): Promise<void> {
 
 async function loadAbilityOptions() {
   if (rulesLoading.value || saving.value) return
-  const requestedProfileId = originProfileId.value
+  const requestedProfileId = ruleProfileId.value
   rulesLoading.value = true
   rulesError.value = ''
   try {
     const options = await getNewBackgroundAbilityOptions(requestedProfileId)
-    if (requestedProfileId !== originProfileId.value) return
+    if (requestedProfileId !== ruleProfileId.value) return
     abilityRules.value = options
     if (abilityCodes.value.length === 0) abilityCodes.value = Array(options.required_count).fill('')
     if (skillEntryIds.value.length === 0)
@@ -233,13 +232,13 @@ async function loadAbilityOptions() {
     if (startingEquipment.value === null)
       startingEquipment.value = { ...options.starting_equipment_defaults, items: [] }
   } catch (cause) {
-    if (requestedProfileId === originProfileId.value) {
+    if (requestedProfileId === ruleProfileId.value) {
       rulesError.value =
         cause instanceof Error ? cause.message : 'Не удалось загрузить поля предыстории'
     }
   } finally {
     rulesLoading.value = false
-    if (form.value.type === 'background' && requestedProfileId !== originProfileId.value)
+    if (form.value.type === 'background' && requestedProfileId !== ruleProfileId.value)
       void loadAbilityOptions()
   }
 }
@@ -258,7 +257,7 @@ watch(
   },
 )
 
-watch(originProfileId, () => {
+watch(ruleProfileId, () => {
   if (form.value.type === 'background') void loadAbilityOptions()
   basicRuleOptions.value = null
   if (form.value.type === 'species' || form.value.type === 'class') void loadBasicRuleOptions()
@@ -299,8 +298,8 @@ async function submit() {
     return
   }
 
-  if (originProfileId.value === null) {
-    submitError.value = 'Выберите происхождение записи'
+  if (ruleProfileId.value === null) {
+    submitError.value = 'Выберите мир записи'
     return
   }
 
@@ -411,7 +410,7 @@ async function submit() {
     type: form.value.type,
     title: form.value.title,
     body: form.value.body,
-    origin_profile_id: originProfileId.value,
+    rule_profile_id: ruleProfileId.value,
     source_id: sourceId.value,
     ...(form.value.type === 'background' &&
     featEntryId.value !== null &&
@@ -487,11 +486,11 @@ async function submit() {
         <label>
           Мир / набор правил
           <select
-            v-model="originProfileId"
+            v-model="ruleProfileId"
             :disabled="optionsLoading || optionsError !== ''"
             required
           >
-            <option disabled :value="null">Выберите профиль</option>
+            <option disabled :value="null">Выберите мир</option>
 
             <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
               {{ profile.title }}
@@ -612,19 +611,24 @@ async function submit() {
           {{ rulebook.error.value }}
           <button type="button" @click="rulebook.load()">Повторить</button>
         </p>
-        <RuleField
-          v-if="!['species', 'class', 'spell'].includes(form.type) && rulebook.options.value"
-          v-model="rulebook.fields.value"
-          :schema="rulebookSchema(form.type)"
-          :options="rulebook.options.value"
-          :disabled="saving"
-        />
+        <section v-if="!['species', 'class', 'spell', 'item'].includes(form.type) && rulebook.options.value" class="rules-check">
+          <h2>Проверка правил</h2>
+          <p>Описание и указанные выше выдачи — единственные правила этой записи. Отметьте после проверки.</p>
+          <label><input v-model="rulebook.fields.value.ready" type="checkbox" />Правила записи заполнены и проверены</label>
+        </section>
         <p v-if="mechanics.error.value" role="alert">
           {{ mechanics.error.value }}
           <button type="button" @click="mechanics.load()">Повторить загрузку механики</button>
         </p>
+        <ItemRuleFields
+          v-if="form.type === 'item' && mechanics.options.value && rulebook.ready.value"
+          v-model:mechanics="mechanics.fields.value"
+          v-model:rulebook="rulebook.fields.value"
+          :item-kind="itemFields.item_kind_code"
+          :options="mechanics.options.value"
+        />
         <EntryMechanicsFields
-          v-if="!['species', 'class', 'spell'].includes(form.type) && mechanics.options.value"
+          v-if="!['species', 'class', 'spell', 'item'].includes(form.type) && mechanics.options.value"
           v-model="mechanics.fields.value"
           :category="form.type"
           :options="mechanics.options.value"
@@ -637,13 +641,7 @@ async function submit() {
           :options="mechanics.options.value"
         >
           <template #advanced>
-            <RuleField
-              v-if="rulebook.options.value"
-              v-model="rulebook.fields.value"
-              :schema="rulebookSchema('spell')"
-              :options="rulebook.options.value"
-              :disabled="saving"
-            />
+            <label><input v-model="rulebook.fields.value.ready" type="checkbox" />Правила доступности заклинания заполнены и проверены</label>
           </template>
         </SpellEditorFields>
         <SpeciesEditorFields

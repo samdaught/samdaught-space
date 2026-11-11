@@ -64,7 +64,7 @@ const fields = defineModel<BasicRuleDraft>({ required: true })
       <legend>Разрешённые навыки класса</legend>
       <p>Отметьте весь список вариантов. Конкретные навыки игрок выберет у персонажа.</p>
       <p v-if="options.skill_options.length === 0">
-        В профиле нет опубликованных навыков с определением.
+        В мире нет опубликованных навыков с определением.
       </p>
       <label v-for="skill in options.skill_options" :key="skill.id">
         <input v-model="fields.class_skill_entry_ids" type="checkbox" :value="skill.id" />{{

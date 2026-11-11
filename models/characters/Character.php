@@ -9,6 +9,7 @@ use app\models\rules\RuleProfile;
 use app\models\users\User;
 use app\services\rules\CatalogAvailability;
 use yii\db\ActiveRecord;
+use yii\db\Query;
 
 class Character extends ActiveRecord
 {
@@ -28,8 +29,24 @@ class Character extends ActiveRecord
         $isMissingValue = static fn($value): bool => $value === null || $value === '';
 
         return [
-            ['subclass_entry_id', 'validateVariant', 'params'=>['type'=>'subclass','table'=>'subclass_definition','parent'=>'class_entry_id']],
-            ['species_variant_entry_id', 'validateVariant', 'params'=>['type'=>'species_variant','table'=>'species_variant_definition','parent'=>'species_entry_id']],
+            [
+                'subclass_entry_id',
+                'validateVariant',
+                'params' => [
+                    'type' => 'subclass',
+                    'table' => 'subclass_definition',
+                    'parent' => 'class_entry_id',
+                ],
+            ],
+            [
+                'species_variant_entry_id',
+                'validateVariant',
+                'params' => [
+                    'type' => 'species_variant',
+                    'table' => 'species_variant_definition',
+                    'parent' => 'species_entry_id',
+                ],
+            ],
             ['name', 'string', 'max' => 255],
             ['name', 'trim', 'skipOnError' => true],
             ['target_level', 'default', 'value' => 1, 'isEmpty' => $isMissingValue],
@@ -76,13 +93,32 @@ class Character extends ActiveRecord
         ];
     }
 
-    public function validateVariant($attribute,$params): void
+    public function validateVariant($attribute, $params): void
     {
-        if($this->hasErrors($attribute))return;
-        $this->validateCatalogEntry($attribute,['expectedType'=>$params['type']]);
-        if($this->hasErrors($attribute))return;
-        $row=(new \yii\db\Query())->from('{{%'.$params['table'].'}}')->where(['catalog_entry_id'=>$this->$attribute])->one();
-        if(!$row||$row[$params['parent']]!==$this->{$params['parent']}||$row['selection_level']>$this->target_level)$this->addError($attribute,'Вариант не принадлежит выбранному классу/виду или ещё недоступен по уровню.');
+        if ($this->hasErrors($attribute)) {
+            return;
+        }
+
+        $this->validateCatalogEntry($attribute, ['expectedType' => $params['type']]);
+        if ($this->hasErrors($attribute)) {
+            return;
+        }
+
+        $row = (new Query())
+            ->from('{{%' . $params['table'] . '}}')
+            ->where(['catalog_entry_id' => $this->$attribute])
+            ->one();
+
+        if (
+            !$row
+            || $row[$params['parent']] !== $this->{$params['parent']}
+            || $row['selection_level'] > $this->target_level
+        ) {
+            $this->addError(
+                $attribute,
+                'Вариант не принадлежит выбранному классу/виду или ещё недоступен по уровню.',
+            );
+        }
     }
 
     public function validateCatalogEntry($attribute, $params): void
@@ -117,14 +153,14 @@ class Character extends ActiveRecord
         $profile = RuleProfile::findOne($this->rule_profile_id);
 
         if ($profile === null) {
-            $this->addError('rule_profile_id', 'Профиль правил не найден.');
+            $this->addError('rule_profile_id', 'Мир правил не найден.');
             return;
         }
 
         $availability = new CatalogAvailability();
 
         if (!$availability->isAvailableInProfile($entry, $profile)) {
-            $this->addError($attribute, 'Выбранная запись недоступна в этом профиле правил.');
+            $this->addError($attribute, 'Выбранная запись недоступна в мире правил персонажа.');
         }
     }
 }

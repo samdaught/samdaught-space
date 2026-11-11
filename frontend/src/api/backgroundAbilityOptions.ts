@@ -7,7 +7,7 @@ export type BackgroundAbilityOption = {
 }
 
 export type BackgroundAbilityOptions = {
-  origin_profile_id: number | null
+  rule_profile_id: number | null
   required_count: number
   ability_options: BackgroundAbilityOption[]
   ability_codes: string[]
@@ -78,7 +78,7 @@ export async function getBackgroundAbilityOptions(id: number): Promise<Backgroun
 export async function getNewBackgroundAbilityOptions(
   originProfileId: number | null = null,
 ): Promise<BackgroundAbilityOptions> {
-  const query = originProfileId === null ? '' : `?origin_profile_id=${originProfileId}`
+  const query = originProfileId === null ? '' : `?rule_profile_id=${originProfileId}`
   return readResponse(
     await fetch('/api/v1/background-ability-options' + query, {
       credentials: 'same-origin',

@@ -18,7 +18,7 @@ class CatalogEntry extends ActiveRecord
                 'attribute' => 'title',
                 'immutable' => true,
                 'ensureUnique' => true,
-                'uniqueValidator' => ['targetAttribute' => ['type', 'slug']],
+                'uniqueValidator' => ['targetAttribute' => ['rule_profile_id', 'type', 'slug']],
             ],
         ];
     }
@@ -30,7 +30,7 @@ class CatalogEntry extends ActiveRecord
             ['body', 'required', 'when' => static function (CatalogEntry $entry): bool {
                 return (bool) $entry->is_published;
             }],
-            [['type', 'slug', 'title', 'origin_profile_id'], 'required'],
+            [['type', 'slug', 'title', 'rule_profile_id'], 'required'],
             ['type', 'string', 'max' => 32],
             [
                 'type',
@@ -40,13 +40,13 @@ class CatalogEntry extends ActiveRecord
             ],
             ['slug', 'string', 'max' => 100],
             ['title', 'string', 'max' => 255],
-            ['origin_profile_id', 'integer'],
-            [['type', 'slug'], 'unique', 'targetAttribute' => ['type', 'slug']],
+            ['rule_profile_id', 'integer'],
+            [['rule_profile_id', 'type', 'slug'], 'unique', 'targetAttribute' => ['rule_profile_id', 'type', 'slug']],
             [
-                'origin_profile_id',
+                'rule_profile_id',
                 'exist',
                 'targetClass' => RuleProfile::class,
-                'targetAttribute' => ['origin_profile_id' => 'id']
+                'targetAttribute' => ['rule_profile_id' => 'id']
             ],
             ['body', 'string'],
             ['source_id', 'default', 'value' => null],

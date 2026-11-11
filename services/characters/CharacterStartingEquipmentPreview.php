@@ -18,7 +18,7 @@ class CharacterStartingEquipmentPreview
         $items = [];
         if ($definition !== null) {
             $form = new BackgroundStartingEquipmentForm();
-            $form->originProfileId = $profile->id;
+            $form->ruleProfileId = $profile->id;
             $form->backgroundToolConfigured = $toolConfigured;
             $form->starting_equipment = $definition;
             $packageAvailable = $form->validate();

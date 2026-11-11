@@ -37,7 +37,7 @@ try {
         'features' => [['title' => 'Находчивый', 'description' => 'После продолжительного отдыха получаешь вдохновение.']],
     ];
     $entry = new CatalogEntry();
-    $entry->setAttributes(['type' => 'species', 'title' => 'Проверка карточки расы', 'body' => 'Описание расы.', 'origin_profile_id' => $profile->id]);
+    $entry->setAttributes(['type' => 'species', 'title' => 'Проверка карточки расы', 'body' => 'Описание расы.', 'rule_profile_id' => $profile->id]);
     $entry->revision = 1;
     $mechanics = EntryMechanics::empty();
     $mechanics['traits'] = [['kind' => 'size', 'value' => 'medium'], ['kind' => 'language', 'value' => 'Общий']];

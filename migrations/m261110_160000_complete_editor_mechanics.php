@@ -12,14 +12,6 @@ class m261110_160000_complete_editor_mechanics extends Migration
         $this->addCheck('ck_spell_definition_type', '{{%spell_definition}}', "[[entry_type]] = 'spell'");
         $this->addCheck('ck_spell_definition_level', '{{%spell_definition}}', '[[level]] BETWEEN 0 AND 9');
         $this->addForeignKey('fk_spell_definition_entry', '{{%spell_definition}}', ['catalog_entry_id', 'entry_type'], '{{%catalog_entry}}', ['id', 'type'], 'RESTRICT', 'RESTRICT');
-        $this->createTable('{{%class_spellcasting}}', ['class_entry_id' => $this->integer()->notNull(), 'enabled' => $this->boolean()->notNull(), 'ability_code' => $this->string(3), 'cantrip_count' => $this->smallInteger()->notNull()->defaultValue(0), 'known_count' => $this->smallInteger()->notNull()->defaultValue(0), 'prepared_count' => $this->smallInteger()->notNull()->defaultValue(0), 'slot_count' => $this->smallInteger()->notNull()->defaultValue(0)]);
-        $this->addPrimaryKey('pk_class_spellcasting', '{{%class_spellcasting}}', 'class_entry_id');
-        $this->addForeignKey('fk_class_spellcasting_class', '{{%class_spellcasting}}', 'class_entry_id', '{{%class_definition}}', 'catalog_entry_id', 'RESTRICT', 'RESTRICT');
-        $this->addForeignKey('fk_class_spellcasting_ability', '{{%class_spellcasting}}', 'ability_code', '{{%ability_definition}}', 'code', 'RESTRICT', 'RESTRICT');
-        $this->addCheck('ck_class_spellcasting_config', '{{%class_spellcasting}}', '([[enabled]] AND [[ability_code]] IS NOT NULL) OR (NOT [[enabled]] AND [[ability_code]] IS NULL AND [[cantrip_count]]=0 AND [[known_count]]=0 AND [[prepared_count]]=0 AND [[slot_count]]=0)');
-        foreach (['cantrip_count', 'known_count', 'prepared_count', 'slot_count'] as $column) {
-            $this->addCheck('ck_casting_' . $column, '{{%class_spellcasting}}', '[[' . $column . ']] BETWEEN 0 AND 100');
-        }
         $this->createTable('{{%class_spell}}', ['class_entry_id' => $this->integer()->notNull(), 'spell_entry_id' => $this->integer()->notNull()]);
         $this->addPrimaryKey('pk_class_spell', '{{%class_spell}}', ['class_entry_id', 'spell_entry_id']);
         $this->createIndex('ix_class_spell_spell', '{{%class_spell}}', 'spell_entry_id');
@@ -65,7 +57,7 @@ class m261110_160000_complete_editor_mechanics extends Migration
     }
     public function safeDown()
     {
-        foreach (['entry_unarmored_defense', 'entry_spellcasting', 'armor_definition', 'character_equipment_package', 'entry_equipment_package_item', 'entry_equipment_package', 'entry_trait', 'entry_bonus', 'class_spell', 'class_spellcasting', 'spell_definition'] as $table) {
+        foreach (['entry_unarmored_defense', 'entry_spellcasting', 'armor_definition', 'character_equipment_package', 'entry_equipment_package_item', 'entry_equipment_package', 'entry_trait', 'entry_bonus', 'class_spell', 'spell_definition'] as $table) {
             $this->dropTable('{{%' . $table . '}}');
         }
         $this->dropIndex('ux_catalog_entry_id_type', '{{%catalog_entry}}');

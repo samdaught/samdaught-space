@@ -12,20 +12,19 @@ class SpellcastingRules
 {
     public function get(int $classId, RuleProfile $profile, array $selections, int $targetLevel=1, array $adjustments=[], array $excluded=[], ?string $selectedAbility=null): array
     {
-        $rule = (new Query())->from('{{%class_spellcasting}}')->where(['class_entry_id' => $classId])->one();
-        $book=(new Rulebook())->read($classId);
-        $hasProgress=(new Query())->from('{{%class_level_rule}}')->where(['class_entry_id'=>$classId])->exists();
-        if(!$rule&&$hasProgress)$rule=['enabled'=>false,'ability_code'=>null,'cantrip_count'=>0,'known_count'=>0,'prepared_count'=>0,'slot_count'=>0];
-        if (!$rule) {
-            return ['configured' => false, 'enabled' => false, 'ability_code' => null, 'slot_count' => 0, 'groups' => [], 'issues' => ['У класса не настроено заклинательство первого уровня. Укажите магию или явно отключите её.']];
+        $book = (new Rulebook())->read($classId);
+        $progress = (new Query())->from('{{%class_level_rule}}')->where(['class_entry_id' => $classId, 'level' => $targetLevel])->one();
+        if (!$progress) {
+            return ['configured' => false, 'enabled' => false, 'ability_code' => null, 'slot_count' => 0, 'groups' => [], 'issues' => ['Не заполнена таблица развития для этого уровня класса.']];
         }
-        $progress=(new Query())->from('{{%class_level_rule}}')->where(['class_entry_id'=>$classId,'level'=>$targetLevel])->one();
-        $slots=[];$maxLevel=1;
-        if($progress){$slots=(new Query())->select(['spell_level','count'])->from('{{%class_level_slot}}')->where(['class_entry_id'=>$classId,'level'=>$targetLevel])->andWhere(['>','count',0])->orderBy('spell_level')->all();$maxLevel=$slots?max(array_column($slots,'spell_level')):0;$rule=array_replace($rule,$progress);$rule['enabled']=$progress['kind']!=='none';$rule['slot_count']=array_sum(array_column($slots,'count'));}
-        elseif($targetLevel!==1)return ['configured'=>false,'enabled'=>false,'ability_code'=>null,'slot_count'=>0,'groups'=>[],'issues'=>['Не заполнен уровень класса.']];
-        foreach(['cantrip_count','known_count','prepared_count'] as $field)$rule[$field]=max(0,min(100,$rule[$field]+($adjustments[$field]??0)));
-        $rule['ability_code']=$selectedAbility??$book['casting_ability_code']??$rule['ability_code'];
-        if($rule['enabled']&&$rule['ability_code']===null)return ['configured'=>false,'enabled'=>true,'ability_code'=>null,'slot_count'=>$rule['slot_count'],'groups'=>[],'issues'=>['Не настроена магическая характеристика заклинательства.']];
+        $slots = (new Query())->select(['spell_level', 'count'])->from('{{%class_level_slot}}')->where(['class_entry_id' => $classId, 'level' => $targetLevel])->andWhere(['>', 'count', 0])->orderBy('spell_level')->all();
+        $maxLevel = $slots ? max(array_column($slots, 'spell_level')) : 0;
+        $rule = $progress;
+        $rule['enabled'] = $progress['kind'] !== 'none';
+        $rule['slot_count'] = array_sum(array_column($slots, 'count'));
+        foreach (['cantrip_count', 'known_count', 'prepared_count'] as $field) $rule[$field] = max(0, min(100, $rule[$field] + ($adjustments[$field] ?? 0)));
+        $rule['ability_code'] = $selectedAbility ?? $book['casting_ability_code'];
+        if ($rule['enabled'] && $rule['ability_code'] === null) return ['configured' => false, 'enabled' => true, 'ability_code' => null, 'slot_count' => $rule['slot_count'], 'groups' => [], 'issues' => ['Настройте магическую характеристику для класса или подкласса.']];
         $groups = [];
         if ($rule['enabled']) {
             $options = [];

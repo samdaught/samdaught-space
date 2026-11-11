@@ -80,6 +80,7 @@ class CatalogEntryApiController extends ApiController
                     'index' => ['GET'],
                     'view' => ['GET'],
                     'create' => ['POST'],
+                    'copy-to-world' => ['POST'],
                     'publish' => ['POST'],
                     'unpublish' => ['POST'],
                     'update' => ['PATCH'],
@@ -125,15 +126,17 @@ class CatalogEntryApiController extends ApiController
                 ['category' => CatalogEntryType::tableName()],
                 '[[category.code]] = [[entry.type]]'
             )
-            ->leftJoin(['rulebook'=>'{{%entry_rulebook}}'],'[[rulebook.entry_id]]=[[entry.id]]')
+            ->leftJoin(['rules'=>'{{%entry_rules}}'],'[[rules.entry_id]]=[[entry.id]]')
+            ->innerJoin(['profile' => RuleProfile::tableName()], '[[profile.id]] = [[entry.rule_profile_id]]')
             ->select([
                 'entry.id',
-                'mechanics_status'=>new \yii\db\Expression("CASE WHEN [[rulebook.ready]] THEN 'ready' WHEN [[rulebook.entry_id]] IS NOT NULL THEN 'partial' ELSE 'text' END"),
+                'mechanics_status'=>new \yii\db\Expression("CASE WHEN [[rules.ready]] THEN 'ready' WHEN [[rules.entry_id]] IS NOT NULL THEN 'partial' ELSE 'text' END"),
                 'entry.type',
                 'entry.slug',
                 'entry.title',
                 'entry.body',
-                'entry.origin_profile_id',
+                'entry.rule_profile_id',
+                'rule_profile_title' => 'profile.title',
                 'entry.source_id',
                 'entry.is_published',
                 'type_title' => 'category.title',
@@ -214,6 +217,43 @@ class CatalogEntryApiController extends ApiController
         return ['data' => $this->getEntryData($entry)];
     }
 
+    public function actionCopyToWorld(int $id): array
+    {
+        $source = CatalogEntry::findOne($id);
+        if ($source === null) {
+            throw new \yii\web\NotFoundHttpException('Запись не найдена.');
+        }
+        if (in_array($source->type, ['background', 'subclass', 'species_variant'], true)) {
+            throw new \yii\web\BadRequestHttpException('Эту зависимую запись пока нельзя переносить отдельно. Сначала создайте её основу в целевом мире.');
+        }
+        $request = Yii::$app->request->getBodyParams();
+        $targetId = is_array($request) ? ($request['rule_profile_id'] ?? null) : null;
+        if (!is_int($targetId) || $targetId < 1) {
+            throw new \yii\web\BadRequestHttpException('Выберите целевой мир.');
+        }
+        $target = RuleProfile::findOne($targetId);
+        if ($target === null) {
+            throw new \yii\web\NotFoundHttpException('Целевой мир не найден.');
+        }
+        if ((int) $source->rule_profile_id === (int) $target->id) {
+            throw new \yii\web\BadRequestHttpException('Запись уже принадлежит этому миру.');
+        }
+
+        $payload = $this->copyPayload($this->getEntryData($source), $target->id);
+        $copy = new CatalogEntry();
+        $copy->load($payload, '');
+        $copy->revision = 1;
+        if (!$this->saveEntry($copy, $payload, true)) {
+            Yii::$app->response->setStatusCode(422);
+            return ['error' => [
+                'code' => 'VALIDATION_FAILED',
+                'message' => 'Не удалось подготовить копию. Проверьте связи записи.',
+                'fields' => $copy->getErrors(),
+            ]];
+        }
+        Yii::$app->response->setStatusCode(201);
+        return ['data' => $this->getEntryData($copy)];
+    }
     public function actionUpdate(int $id): array
     {
         return Yii::$app->db->transaction(function () use ($id): array {
@@ -289,13 +329,13 @@ class CatalogEntryApiController extends ApiController
 
     public function actionBasicRuleOptions(): array
     {
-        $input = Yii::$app->request->get('origin_profile_id');
+        $input = Yii::$app->request->get('rule_profile_id');
         $profile = null;
         if ($input !== null) {
             $id = filter_var($input, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-            if ($id === false) throw new \yii\web\BadRequestHttpException('Профиль происхождения должен быть положительным целым числом.');
+            if ($id === false) throw new \yii\web\BadRequestHttpException('Мир должен быть положительным целым числом.');
             $profile = RuleProfile::find()->where('[[id]] = CAST(:id AS BIGINT)', [':id' => $id])->one();
-            if ($profile === null) throw new \yii\web\NotFoundHttpException('Профиль происхождения не найден.');
+            if ($profile === null) throw new \yii\web\NotFoundHttpException('Мир не найден.');
         }
         return ['data' => [
             'skill_options' => (new SkillOptions())->get($profile),
@@ -309,39 +349,39 @@ class CatalogEntryApiController extends ApiController
 
     public function actionCreationRuleOptions(): array
     {
-        $input = Yii::$app->request->get('origin_profile_id');
+        $input = Yii::$app->request->get('rule_profile_id');
         $profile = null;
         if ($input !== null) {
             $id = filter_var($input, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 2147483647]]);
-            if ($id === false) throw new \yii\web\BadRequestHttpException('Некорректный профиль происхождения.');
+            if ($id === false) throw new \yii\web\BadRequestHttpException('Некорректный мир.');
             $profile = RuleProfile::findOne($id);
-            if ($profile === null) throw new \yii\web\NotFoundHttpException('Профиль не найден.');
+            if ($profile === null) throw new \yii\web\NotFoundHttpException('Мир не найден.');
         }
         return ['data' => (new CreationRules())->options($profile)];
     }
 
     public function actionMechanicsOptions(): array
     {
-        $id=Yii::$app->request->get('origin_profile_id');
+        $id=Yii::$app->request->get('rule_profile_id');
         $profile=null;
         if ($id!==null) {
             $id=filter_var($id,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
-            if ($id===false || ($profile=RuleProfile::findOne($id))===null) throw new \yii\web\BadRequestHttpException('Выберите существующий профиль.');
+            if ($id===false || ($profile=RuleProfile::findOne($id))===null) throw new \yii\web\BadRequestHttpException('Выберите существующий мир.');
         }
         return ['data'=>(new \app\services\rules\EntryMechanics())->options($profile)];
     }
 
     public function actionRulebookOptions(): array
     {
-        $id=Yii::$app->request->get('origin_profile_id');$profile=null;
-        if($id!==null){$id=filter_var($id,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);if($id===false||($profile=RuleProfile::findOne($id))===null)throw new \yii\web\BadRequestHttpException('Выберите существующий профиль.');}
+        $id=Yii::$app->request->get('rule_profile_id');$profile=null;
+        if($id!==null){$id=filter_var($id,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);if($id===false||($profile=RuleProfile::findOne($id))===null)throw new \yii\web\BadRequestHttpException('Выберите существующий мир.');}
         return ['data'=>(new \app\services\rules\Rulebook())->options($profile)];
     }
 
     private function getEntryData(CatalogEntry $entry): array
     {
         $data = $entry->getAttributes([
-            'id', 'type', 'slug', 'title', 'body', 'origin_profile_id', 'source_id', 'is_published',
+            'id', 'type', 'slug', 'title', 'body', 'rule_profile_id', 'source_id', 'is_published',
         ]);
         if (in_array($entry->type, CreationRules::SOURCE_TYPES, true)) $data['creation_rules'] = (new CreationRules())->read($entry->id);
         if ($entry->type === 'skill') {
@@ -386,6 +426,53 @@ class CatalogEntryApiController extends ApiController
         $data['revision'] = $entry->revision;
         $data['rulebook'] = (new \app\services\rules\Rulebook())->read($entry->id);
         $data['mechanics'] = (new \app\services\rules\EntryMechanics())->read($entry);
+        return $data;
+    }
+
+    /**
+     * Копия не сохраняет связи с записями исходного мира. Она создаётся
+     * неопубликованным черновиком, а мастер связывает записи целевого мира явно.
+     */
+    private function copyPayload(array $data, int $targetProfileId): array
+    {
+        unset($data['id'], $data['revision'], $data['slug']);
+        $data['rule_profile_id'] = $targetProfileId;
+        $data['is_published'] = false;
+
+        if (isset($data['creation_rules'])) {
+            $data['creation_rules'] = ['grants' => [], 'choices' => [], 'hit_point_bonus' => 0];
+        }
+        if ($data['type'] === 'class') {
+            // Навыки принадлежат миру. Черновик остаётся валидным, а мастер
+            // явно настраивает число выборов и навыки целевого мира.
+            $data['class_skill_choice_count'] = 0;
+            $data['class_skill_entry_ids'] = [];
+        }
+        if (isset($data['mechanics']) && is_array($data['mechanics'])) {
+            $data['mechanics']['equipment'] = [];
+            $data['mechanics']['spell_ids'] = [];
+            $data['mechanics']['class_ids'] = [];
+        }
+        if (isset($data['rulebook']) && is_array($data['rulebook'])) {
+            $rules = $data['rulebook'];
+            $rules['parent_entry_id'] = null;
+            $rules['selection_level'] = 1;
+            $rules['prerequisites'] = ['op' => 'all', 'conditions' => []];
+            $rules['choices'] = [];
+            $rules['distinct_choices'] = [];
+            $rules['effects'] = [];
+            $rules['casting_choice_code'] = null;
+            $rules['spell_list_class_ids'] = [];
+            $rules['unlocks'] = [];
+            $rules['spell_grants'] = [];
+            $rules['spell_picks'] = [];
+            $rules['resources'] = [];
+            $rules['ready'] = false;
+            if (isset($rules['item']) && is_array($rules['item'])) {
+                $rules['item']['magic'] = null;
+            }
+            $data['rulebook'] = $rules;
+        }
         return $data;
     }
 
@@ -441,8 +528,8 @@ class CatalogEntryApiController extends ApiController
         $hasSkillIds = array_key_exists('skill_entry_ids', $data);
         if ($entry->type === 'background' && ($creating || $hasSkillIds)) {
             $backgroundSkillsForm = new BackgroundSkillsForm();
-            $backgroundSkillsForm->originProfileId = $entry->hasErrors('origin_profile_id')
-                ? null : (int) $entry->origin_profile_id;
+            $backgroundSkillsForm->ruleProfileId = $entry->hasErrors('rule_profile_id')
+                ? null : (int) $entry->rule_profile_id;
             $backgroundSkillsForm->skill_entry_ids = $data['skill_entry_ids'] ?? null;
             if (!$backgroundSkillsForm->validate()) {
                 $entry->addErrors($backgroundSkillsForm->getErrors());
@@ -470,8 +557,8 @@ class CatalogEntryApiController extends ApiController
         $hasFeatId = array_key_exists('feat_entry_id', $data);
         if ($entry->type === 'background' && ($creating || $hasFeatId)) {
             $backgroundFeatForm = new BackgroundFeatForm();
-            $backgroundFeatForm->originProfileId = $entry->hasErrors('origin_profile_id')
-                ? null : (int) $entry->origin_profile_id;
+            $backgroundFeatForm->ruleProfileId = $entry->hasErrors('rule_profile_id')
+                ? null : (int) $entry->rule_profile_id;
             $backgroundFeatForm->feat_entry_id = $data['feat_entry_id'] ?? null;
             if (!$backgroundFeatForm->validate()) {
                 $entry->addErrors($backgroundFeatForm->getErrors());
@@ -510,8 +597,8 @@ class CatalogEntryApiController extends ApiController
         $hasBackgroundTool = array_key_exists('background_tool', $data);
         if ($entry->type === 'background' && ($creating || $hasBackgroundTool)) {
             $backgroundToolForm = new BackgroundToolForm();
-            $backgroundToolForm->originProfileId = $entry->hasErrors('origin_profile_id')
-                ? null : (int) $entry->origin_profile_id;
+            $backgroundToolForm->ruleProfileId = $entry->hasErrors('rule_profile_id')
+                ? null : (int) $entry->rule_profile_id;
             $backgroundToolForm->background_tool = $data['background_tool'] ?? null;
             if (!$backgroundToolForm->validate()) {
                 $entry->addErrors($backgroundToolForm->getErrors());
@@ -525,7 +612,7 @@ class CatalogEntryApiController extends ApiController
         $hasEquipment = array_key_exists('starting_equipment', $data);
         if ($entry->type === 'background' && ($creating || $hasEquipment)) {
             $equipmentForm = new BackgroundStartingEquipmentForm();
-            $equipmentForm->originProfileId = $entry->hasErrors('origin_profile_id') ? null : (int) $entry->origin_profile_id;
+            $equipmentForm->ruleProfileId = $entry->hasErrors('rule_profile_id') ? null : (int) $entry->rule_profile_id;
             $equipmentForm->backgroundToolConfigured = $backgroundToolForm !== null
                 ? !$backgroundToolForm->hasErrors()
                 : BackgroundToolProficiency::find()->where(['background_entry_id' => $entry->id])->exists();
@@ -587,7 +674,7 @@ class CatalogEntryApiController extends ApiController
                 $entry->addError('class_hit_die_sides', 'Для старого класса заполните также кость хитов и спасброски.');
                 $valid = false;
             }
-            $classSkillsForm->originProfileId = $entry->origin_profile_id;
+            $classSkillsForm->ruleProfileId = $entry->rule_profile_id;
             foreach ($skillFields as $field) {
                 $classSkillsForm->$field = array_key_exists($field, $data) ? $data[$field] : $previous[$field];
             }
@@ -604,7 +691,7 @@ class CatalogEntryApiController extends ApiController
         if (in_array($entry->type, CreationRules::SOURCE_TYPES, true) && ($creating || $hasCreationRules)) {
             $creationForm = new CreationRulesForm();
             $creationForm->sourceId = $creating ? null : $entry->id;
-            $creationForm->originProfileId = $entry->origin_profile_id;
+            $creationForm->ruleProfileId = $entry->rule_profile_id;
             $creationForm->creation_rules = $hasCreationRules ? $data['creation_rules'] : ['grants' => [], 'choices' => []];
             if (!$creationForm->validate()) { $entry->addErrors($creationForm->getErrors()); $valid = false; }
         } elseif ($hasCreationRules) { $entry->addError('creation_rules', 'Эта категория не может задавать выдачи при создании.'); $valid = false; }
@@ -631,12 +718,12 @@ class CatalogEntryApiController extends ApiController
 
         $rulebook = null;
         if (array_key_exists('rulebook',$data) || $creating && in_array($entry->type,['subclass','species_variant'],true)) {
-            try { $rulebook=(new \app\services\rules\Rulebook())->validate($entry,$data['rulebook']??[]); }
+            try { $rulebook=(new \app\services\rules\Rulebook())->validate($entry,$data['rulebook']??[],$itemForm?->item_kind_code); }
             catch (\InvalidArgumentException $error) { $entry->addError('rulebook',$error->getMessage()); $valid=false; }
         }
         $mechanics = null;
         if (array_key_exists('mechanics',$data)) {
-            try { $mechanics=(new \app\services\rules\EntryMechanics())->validate($entry,$data['mechanics']); }
+            try { $mechanics=(new \app\services\rules\EntryMechanics())->validate($entry,$data['mechanics'],$itemForm?->item_kind_code); }
             catch (\InvalidArgumentException $error) { $entry->addError('mechanics',$error->getMessage()); $valid=false; }
         } elseif ($creating && in_array($entry->type,['spell','class'],true)) {
             $entry->addError('mechanics','Заполните механику заклинания или заклинательство класса.'); $valid=false;
@@ -719,7 +806,7 @@ class CatalogEntryApiController extends ApiController
                 'slug',
                 'title',
                 'body',
-                'origin_profile_id',
+                'rule_profile_id',
                 'source_id',
                 'is_published',
             ]),
@@ -756,7 +843,7 @@ class CatalogEntryApiController extends ApiController
                 'slug',
                 'title',
                 'body',
-                'origin_profile_id',
+                'rule_profile_id',
                 'source_id',
                 'is_published',
             ]),

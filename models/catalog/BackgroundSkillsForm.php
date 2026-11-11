@@ -14,7 +14,7 @@ class BackgroundSkillsForm extends Model
     public const REQUIRED_COUNT = 2;
     public $skill_entry_ids = null;
 
-    public ?int $originProfileId = null;
+    public ?int $ruleProfileId = null;
 
     public function rules(): array
     {
@@ -38,7 +38,7 @@ class BackgroundSkillsForm extends Model
             $this->addError($attribute, 'Навыки предыстории не должны повторяться.');
             return;
         }
-        $profile = $this->originProfileId === null ? null : RuleProfile::findOne($this->originProfileId);
+        $profile = $this->ruleProfileId === null ? null : RuleProfile::findOne($this->ruleProfileId);
         if ($profile === null) {
             $this->addError($attribute, 'Сначала выберите корректный профиль происхождения предыстории.');
             return;

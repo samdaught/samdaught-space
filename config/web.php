@@ -114,6 +114,7 @@ $config = [
                 'GET api/v1/catalog-entries/<id:\d+>' => 'catalog/catalog-entry-api/view',
                 'POST api/v1/catalog-entries' => 'catalog/catalog-entry-api/create',
                 'PATCH api/v1/catalog-entries/<id:\d+>' => 'catalog/catalog-entry-api/update',
+                'POST api/v1/catalog-entries/<id:\d+>/copy-to-world' => 'catalog/catalog-entry-api/copy-to-world',
                 'GET api/v1/catalog-entries/<id:\d+>/background-abilities' => 'catalog/background-ability-api/view',
                 'PATCH api/v1/catalog-entries/<id:\d+>/background-abilities' => 'catalog/background-ability-api/update',
                 'POST api/v1/catalog-entries/<id:\d+>/publish' => 'catalog/catalog-entry-api/publish',
@@ -128,8 +129,6 @@ $config = [
 
                 'GET api/v1/archive/types' => 'catalog/archive-api/types',
                 'GET api/v1/archive/entries/<id:\d+>' => 'catalog/archive-api/view',
-                'GET api/v1/catalog-entries/<id:\d+>/availability' => 'catalog/profile-availability-api/view',
-                'PATCH api/v1/catalog-entries/<id:\d+>/availability/<profileId:\d+>' => 'catalog/profile-availability-api/update',
                 'GET api/v1/archive/entries' => 'catalog/archive-api/index',
 
                 'GET api/v1/catalog-audit' => 'catalog/catalog-entry-api/audit',

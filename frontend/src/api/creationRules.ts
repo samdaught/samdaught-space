@@ -25,7 +25,7 @@ export type CreationRuleOptions = {
 export async function getCreationRuleOptions(
   profileId: number | null,
 ): Promise<CreationRuleOptions> {
-  const query = profileId === null ? '' : '?origin_profile_id=' + profileId
+  const query = profileId === null ? '' : '?rule_profile_id=' + profileId
   const response = await fetch('/api/v1/creation-rule-options' + query, {
     credentials: 'same-origin',
   })

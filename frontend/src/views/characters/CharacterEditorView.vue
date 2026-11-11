@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   CharacterEditorError,
@@ -472,17 +472,131 @@ const sections = [
   'Характер персонажа',
   'Внешность',
 ]
+
+type BuilderStageState = 'complete' | 'selected' | 'pending' | 'optional'
+
+type BuilderStage = {
+  title: string
+  state: BuilderStageState
+  stateTitle: string
+}
+
+function stage(
+  title: string,
+  complete: boolean,
+  selected = false,
+  optional = false,
+): BuilderStage {
+  if (optional) return { title, state: 'optional', stateTitle: 'по желанию' }
+  if (complete) return { title, state: 'complete', stateTitle: 'заполнено' }
+  if (selected) return { title, state: 'selected', stateTitle: 'выбрано' }
+  return { title, state: 'pending', stateTitle: 'нужно заполнить' }
+}
+
+const builderStages = computed<BuilderStage[]>(() => {
+  const current = options.value
+  return [
+    stage(
+      sections[0]!,
+      Boolean(draft.value.name.trim() && draft.value.rule_profile_id && draft.value.target_level),
+    ),
+    stage(
+      sections[1]!,
+      Boolean(draft.value.background_entry_id && current?.benefits.complete),
+      draft.value.background_entry_id !== null,
+    ),
+    stage(sections[2]!, draft.value.species_entry_id !== null),
+    stage(sections[3]!, draft.value.class_entry_id !== null),
+    stage(
+      sections[4]!,
+      Boolean(
+        current?.ability_scores.calculation.base_scores_complete &&
+          current.ability_scores.calculation.background_increases_complete,
+      ),
+    ),
+    stage(sections[5]!, Boolean(current?.class_skills.complete)),
+    stage(sections[6]!, Boolean(current?.benefits.complete)),
+    stage(sections[7]!, Boolean(current?.creation.complete)),
+    stage(
+      sections[8]!,
+      Boolean(
+        draft.value.background_entry_id &&
+          draft.value.class_entry_id &&
+          current?.starting_packages.complete &&
+          current.inventory.manual_items_valid,
+      ),
+    ),
+    stage(sections[9]!, false, false, true),
+    stage(sections[10]!, false, false, true),
+  ]
+})
+
+const editorView = ref<'full' | 'guided'>('full')
+const guidedStep = ref(1)
+const guidedStage = computed(() => builderStages.value[guidedStep.value - 1] ?? builderStages.value[0]!)
+
+function showSection(index: number): boolean {
+  return editorView.value === 'full' || guidedStep.value === index
+}
+
+function setEditorView(view: 'full' | 'guided'): void {
+  editorView.value = view
+  if (view === 'guided') {
+    const firstUnfinished = builderStages.value.findIndex((stage) => stage.state === 'pending')
+    guidedStep.value = firstUnfinished === -1 ? 1 : firstUnfinished + 1
+  }
+}
+
+async function goToGuidedStep(step: number): Promise<void> {
+  guidedStep.value = Math.max(1, Math.min(sections.length, step))
+  await nextTick()
+  document.getElementById(`builder-section-${guidedStep.value}`)?.scrollIntoView({ block: 'start' })
+}
+
+const requiredStageCount = computed(
+  () => builderStages.value.filter((stage) => stage.state !== 'optional').length,
+)
+const filledStageCount = computed(
+  () =>
+    builderStages.value.filter(
+      (stage) => stage.state === 'complete' || stage.state === 'selected',
+    ).length,
+)
+const sheetPulse = computed(() => {
+  if (dirty.value) {
+    return {
+      title: 'Лист ожидает сохранения',
+      detail: 'Расчётные значения обновятся после сохранения черновика.',
+    }
+  }
+  if (!savedState.value) {
+    return {
+      title: 'Лист ещё не рассчитан',
+      detail: 'Сохраните черновик, чтобы увидеть расчётные значения.',
+    }
+  }
+  if (savedState.value.readiness.complete) {
+    return {
+      title: 'Лист готов к завершению',
+      detail: 'Все обязательные выборы прошли последнюю проверку.',
+    }
+  }
+  return {
+    title: 'Есть незавершённые выборы',
+    detail: `Проверка видит: ${savedState.value.readiness.issues.length}.`,
+  }
+})
 </script>
 
 <template>
   <div class="character-builder">
     <header class="builder-heading">
       <div>
-        <p class="eyebrow">Мастерская персонажа</p>
+        <p class="eyebrow">Книга персонажа</p>
         <h1>{{ characterId === null ? 'Создание персонажа' : 'Редактор персонажа' }}</h1>
         <p>
-          От первой идеи до готового героя. Выберите происхождение, соберите способности и
-          расскажите свою историю.
+          Соберите основу героя, а лист сохранит расчёты для игры за столом. Незавершённые выборы
+          можно оставить в черновике и вернуться к ним позже.
         </p>
       </div>
       <RouterLink to="/cabinet">Мои персонажи ↗</RouterLink>
@@ -490,19 +604,85 @@ const sections = [
     <p v-if="loading" role="status">Загружаем редактор…</p>
     <p v-if="pageError" role="alert">{{ pageError }}</p>
     <template v-if="!loading && !pageError && savedState?.character.status !== 'ready'">
-      <div class="builder-abilities" role="region" aria-label="Текущие характеристики персонажа">
-        <div v-for="ability in liveAbilities" :key="ability.code">
-          <span>{{ ability.title }}</span
-          ><strong
-            >{{ ability.total ?? '—' }} <small>({{ signed(ability.modifier) }})</small></strong
-          >
+      <div class="builder-workbench" :class="`is-${editorView}`">
+        <div class="builder-abilities" role="region" aria-label="Текущие характеристики персонажа">
+          <div v-for="ability in liveAbilities" :key="ability.code">
+            <span>{{ ability.title }}</span
+            ><strong
+              >{{ ability.total ?? '—' }} <small>({{ signed(ability.modifier) }})</small></strong
+            >
+          </div>
+          <p v-if="!liveAbilities.length">Характеристики появятся после загрузки вариантов.</p>
         </div>
-        <p v-if="!liveAbilities.length">Характеристики появятся после загрузки вариантов.</p>
+        <div class="builder-toolbar">
+          <div class="builder-view-switcher" role="group" aria-label="Режим редактора">
+            <button
+              type="button"
+              :aria-pressed="editorView === 'full'"
+              :class="{ active: editorView === 'full' }"
+              @click="setEditorView('full')"
+            >
+              Полный лист
+            </button>
+            <button
+              type="button"
+              :aria-pressed="editorView === 'guided'"
+              :class="{ active: editorView === 'guided' }"
+              @click="setEditorView('guided')"
+            >
+              Пошаговое заполнение
+            </button>
+          </div>
+          <p v-if="editorView === 'full'" class="builder-progress">
+            Заполнено {{ filledStageCount }} из {{ requiredStageCount }} обязательных разделов
+          </p>
+          <p v-else class="builder-progress">
+            Шаг {{ guidedStep }} из {{ sections.length }}: {{ guidedStage.title }}
+          </p>
+          <a v-if="editorView === 'full'" class="builder-sheet-pulse" href="#current-sheet">
+            {{ sheetPulse.title }}
+          </a>
+          <span v-else class="builder-sheet-pulse">{{ sheetPulse.title }}</span>
+        </div>
+        <nav v-if="editorView === 'guided'" class="builder-stepper" aria-label="Шаги заполнения">
+          <div>
+            <span>Текущий раздел</span>
+            <strong>{{ guidedStage.title }}</strong>
+            <small>{{ guidedStage.stateTitle }}</small>
+          </div>
+          <div class="builder-step-actions">
+            <button
+              type="button"
+              :disabled="guidedStep === 1"
+              @click="goToGuidedStep(guidedStep - 1)"
+            >
+              Назад
+            </button>
+            <button
+              type="button"
+              :disabled="guidedStep === sections.length"
+              @click="goToGuidedStep(guidedStep + 1)"
+            >
+              Далее
+            </button>
+          </div>
+        </nav>
       </div>
-      <nav class="builder-index" aria-label="Разделы редактора">
-        <a v-for="(title, index) in sections" :key="title" :href="`#builder-section-${index + 1}`"
-          >{{ index + 1 }}. {{ title }}</a
-        ><a href="#current-sheet">Текущий лист ↓</a>
+      <nav
+        v-if="editorView === 'full'"
+        class="builder-index"
+        aria-label="Разделы полного листа"
+      >
+        <a
+          v-for="(stage, index) in builderStages"
+          :key="stage.title"
+          :class="`is-${stage.state}`"
+          :href="`#builder-section-${index + 1}`"
+          :aria-label="`${index + 1}. ${stage.title}: ${stage.stateTitle}`"
+        >
+          <span class="builder-index-number">{{ index + 1 }}</span>
+          <span>{{ stage.title }}</span>
+        </a>
       </nav>
       <p v-if="optionsLoading" role="status">Обновляем варианты и особенности…</p>
       <div v-if="optionsError" role="alert">
@@ -517,7 +697,9 @@ const sections = [
         :aria-busy="saving || optionsLoading"
         @submit.prevent="submit(false)"
       >
-        <section id="builder-section-1" class="builder-card" aria-labelledby="builder-title-1">
+        <section
+          v-show="showSection(1)"
+          id="builder-section-1" class="builder-card" aria-labelledby="builder-title-1">
           <div class="builder-card-heading">
             <h2 id="builder-title-1"><span>01</span> Основа</h2>
             <RouterLink to="/cabinet">Открыть персонажа</RouterLink>
@@ -534,18 +716,17 @@ const sections = [
                 placeholder="Как зовут вашего героя?"
                 required /></label
             ><label
-              >Уровень<select :value="draft.target_level" disabled>
-                <option :value="draft.target_level">{{ draft.target_level }}</option></select
-              ><small>Сейчас доступно создание персонажей 1-го уровня.</small></label
+              >Уровень<select v-model.number="draft.target_level">
+                <option v-for="level in 20" :key="level" :value="level">{{ level }}</option>
+              </select
+              ><small>Уровень определяет доступные классовые особенности, ресурсы и расчёт листа.</small></label
             >
           </fieldset>
-          <p v-if="draft.target_level !== 1" role="alert">
-            Этот черновик другого уровня можно сохранить, но завершение доступно только для первого
-            уровня.
-          </p>
         </section>
 
-        <section id="builder-section-2" class="builder-card" aria-labelledby="builder-title-2">
+        <section
+          v-show="showSection(2)"
+          id="builder-section-2" class="builder-card" aria-labelledby="builder-title-2">
           <div class="builder-card-heading">
             <h2 id="builder-title-2"><span>02</span> Предыстория</h2>
           </div>
@@ -617,7 +798,9 @@ const sections = [
           <p v-else>Выберите предысторию, чтобы увидеть её историю и особенности.</p>
         </section>
 
-        <section id="builder-section-3" class="builder-card" aria-labelledby="builder-title-3">
+        <section
+          v-show="showSection(3)"
+          id="builder-section-3" class="builder-card" aria-labelledby="builder-title-3">
           <h2 id="builder-title-3"><span>03</span> Раса</h2>
           <p class="builder-hint">
             Выберите вид персонажа слева. Справа появятся его описание и особенности из архива
@@ -662,7 +845,9 @@ const sections = [
           </fieldset>
         </section>
 
-        <section id="builder-section-4" class="builder-card" aria-labelledby="builder-title-4">
+        <section
+          v-show="showSection(4)"
+          id="builder-section-4" class="builder-card" aria-labelledby="builder-title-4">
           <h2 id="builder-title-4"><span>04</span> Класс</h2>
           <p class="builder-hint">
             Класс определяет роль в приключениях, доступные способности и владения.
@@ -699,7 +884,9 @@ const sections = [
           </fieldset>
         </section>
 
-        <section id="builder-section-5" class="builder-card" aria-labelledby="builder-title-5">
+        <section
+          v-show="showSection(5)"
+          id="builder-section-5" class="builder-card" aria-labelledby="builder-title-5">
           <h2 id="builder-title-5"><span>05</span> Характеристики</h2>
           <p class="builder-hint">
             Распределите стандартный массив между шестью характеристиками, затем добавьте увеличения
@@ -764,7 +951,9 @@ const sections = [
           >
         </section>
 
-        <section id="builder-section-6" class="builder-card" aria-labelledby="builder-title-6">
+        <section
+          v-show="showSection(6)"
+          id="builder-section-6" class="builder-card" aria-labelledby="builder-title-6">
           <h2 id="builder-title-6"><span>06</span> Навыки</h2>
           <p class="builder-hint">
             Выберите, в чём ваш герой особенно хорош. Навыки от предыстории добавляются
@@ -797,7 +986,9 @@ const sections = [
           </fieldset>
         </section>
 
-        <section id="builder-section-7" class="builder-card" aria-labelledby="builder-title-7">
+        <section
+          v-show="showSection(7)"
+          id="builder-section-7" class="builder-card" aria-labelledby="builder-title-7">
           <h2 id="builder-title-7"><span>07</span> Языки и инструменты</h2>
           <p class="builder-hint">Языки и владения определяются происхождением и особенностями.</p>
           <fieldset class="builder-fields" :disabled="saving || !optionsReady">
@@ -818,7 +1009,9 @@ const sections = [
             />
           </fieldset>
         </section>
-        <section id="builder-section-8" class="builder-card" aria-labelledby="builder-title-8">
+        <section
+          v-show="showSection(8)"
+          id="builder-section-8" class="builder-card" aria-labelledby="builder-title-8">
           <h2 id="builder-title-8"><span>08</span> Заклинания</h2>
           <p class="builder-hint">
             Выберите заклинания класса и дополнительных источников. Магическая характеристика
@@ -853,7 +1046,9 @@ const sections = [
           </fieldset>
         </section>
 
-        <section id="builder-section-9" class="builder-card" aria-labelledby="builder-title-9">
+        <section
+          v-show="showSection(9)"
+          id="builder-section-9" class="builder-card" aria-labelledby="builder-title-9">
           <h2 id="builder-title-9"><span>09</span> Снаряжение</h2>
           <p class="builder-hint">
             Выберите стартовый комплект предыстории и добавьте вещи, которые герой возьмёт в
@@ -929,7 +1124,9 @@ const sections = [
           </fieldset>
         </section>
 
-        <section id="builder-section-10" class="builder-card" aria-labelledby="builder-title-10">
+        <section
+          v-show="showSection(10)"
+          id="builder-section-10" class="builder-card" aria-labelledby="builder-title-10">
           <h2 id="builder-title-10"><span>10</span> Характер персонажа</h2>
           <p class="builder-hint">
             Что делает героя узнаваемым? Расскажите о его прошлом, мотивации, привычках и слабостях.
@@ -954,7 +1151,9 @@ const sections = [
           </fieldset>
         </section>
 
-        <section id="builder-section-11" class="builder-card" aria-labelledby="builder-title-11">
+        <section
+          v-show="showSection(11)"
+          id="builder-section-11" class="builder-card" aria-labelledby="builder-title-11">
           <h2 id="builder-title-11"><span>11</span> Внешность</h2>
           <p class="builder-hint">
             Опишите то, что замечают при первой встрече: лицо, одежду, осанку или особую примету.
@@ -972,6 +1171,7 @@ const sections = [
         </section>
 
         <section
+          v-show="editorView === 'full' || guidedStep === sections.length"
           id="current-sheet"
           class="builder-card current-sheet"
           aria-labelledby="current-sheet-title"
@@ -1146,7 +1346,7 @@ const sections = [
           </p>
           <button
             type="button"
-            :disabled="saving || !optionsReady || autosavePaused || draft.target_level !== 1"
+            :disabled="saving || !optionsReady || autosavePaused"
             @click="submit(true)"
           >
             Завершить создание персонажа
@@ -1195,7 +1395,8 @@ const sections = [
 
 <style scoped>
 .character-builder {
-  --builder-radius: 16px;
+  --builder-radius: 8px;
+  --builder-mark: #8d5d78;
 }
 .builder-heading {
   display: flex;
@@ -1208,7 +1409,7 @@ const sections = [
   margin: 0.4rem 0 0.75rem;
 }
 .builder-heading p:not(.eyebrow) {
-  max-width: 46rem;
+  max-width: 50rem;
   color: var(--muted);
 }
 .builder-heading > a {
@@ -1216,66 +1417,193 @@ const sections = [
   margin-top: 0.5rem;
   font-size: 0.85rem;
 }
+.builder-workbench {
+  margin-bottom: 1.35rem;
+}
 .builder-abilities {
-  position: sticky;
-  top: 0.5rem;
-  z-index: 10;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 0.5rem;
-  padding: 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--lavender);
+  gap: 1px;
+  border: 1px solid var(--line-strong);
+  background: var(--line-strong);
   box-shadow: 0 5px 20px #35243e0a;
 }
 .builder-abilities > div {
-  text-align: center;
-  padding: 0.7rem 0.2rem;
-  border: 1px solid var(--line);
-  border-radius: 9px;
+  min-width: 0;
+  padding: 0.65rem 0.2rem;
   background: var(--paper);
+  text-align: center;
 }
 .builder-abilities span {
   display: block;
-  font-size: 0.61rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 .builder-abilities strong {
   display: block;
-  font-size: 1.3rem;
   margin-top: 0.25rem;
   color: var(--accent);
+  font-size: 1.3rem;
 }
 .builder-abilities small {
   font-size: 0.85rem;
 }
+.builder-abilities > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.8rem;
+  background: var(--paper);
+  color: var(--muted);
+  text-align: center;
+}
+.builder-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  padding: 0.75rem 0.15rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+.builder-view-switcher {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+}
+.builder-view-switcher button {
+  min-height: 2rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.builder-view-switcher button + button {
+  border-left: 1px solid var(--line-strong);
+}
+.builder-view-switcher button.active {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.builder-progress {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.builder-sheet-pulse {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.builder-sheet-pulse:hover {
+  text-decoration: underline;
+}
 .builder-index {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  margin: 1.25rem 0 1.75rem;
+  gap: 0.35rem 0.9rem;
+  margin-bottom: 1.35rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  box-shadow: 0 5px 18px #35243e12;
 }
 .builder-index a {
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
   color: var(--muted);
+  font-size: 0.72rem;
   text-decoration: none;
 }
 .builder-index a:hover {
   color: var(--accent);
   text-decoration: underline;
 }
+.builder-index a::after {
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 50%;
+  background: var(--line-strong);
+  content: '';
+}
+.builder-index .is-complete::after {
+  background: #47704f;
+}
+.builder-index .is-selected::after {
+  background: var(--gold);
+}
+.builder-index .is-optional {
+  font-style: italic;
+}
+.builder-index-number {
+  color: var(--accent);
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+}
+.builder-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid var(--gold);
+  background: var(--lavender);
+}
+.builder-stepper > div:first-child {
+  display: grid;
+  gap: 0.1rem;
+}
+.builder-stepper span,
+.builder-stepper small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.builder-stepper strong {
+  color: var(--ink);
+  font-family: var(--font-heading);
+}
+.builder-step-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+.builder-step-actions button {
+  min-width: 5.5rem;
+  font-size: 0.78rem;
+}
+.builder-sheet-pulse:focus-visible,
+.builder-index a:focus-visible,
+.builder-view-switcher button:focus-visible,
+.builder-step-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .builder-card {
-  margin-block: 1.25rem;
+  position: relative;
+  margin-block: 1rem;
   padding: clamp(1.15rem, 2.5vw, 2rem);
   border: 1px solid var(--line);
   border-radius: var(--builder-radius);
   background: var(--paper);
-  box-shadow: 0 4px 18px #35243e04;
+  box-shadow: 0 3px 12px #35243e03;
   scroll-margin-top: 8rem;
+}
+.builder-card::before {
+  position: absolute;
+  top: 0;
+  left: 1.2rem;
+  width: 3.5rem;
+  height: 2px;
+  background: var(--gold);
+  content: '';
 }
 .builder-card h2 {
   display: flex;
@@ -1350,14 +1678,15 @@ const sections = [
   margin-block: 0.25rem 0.75rem;
 }
 .current-sheet {
+  border-color: var(--line-strong);
+  border-left: 3px solid var(--builder-mark);
   background: var(--lavender);
 }
 .sheet-abilities {
   position: static;
-  box-shadow: none;
-  padding: 0;
-  border: 0;
   margin: 1.5rem 0;
+  border-color: var(--line-strong);
+  box-shadow: none;
 }
 .builder-savebar {
   display: flex;
@@ -1403,8 +1732,25 @@ const sections = [
     display: block;
   }
   .builder-abilities {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     position: static;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .builder-toolbar {
+    align-items: flex-start;
+  }
+  .builder-sheet-pulse {
+    width: 100%;
+    margin-left: 0;
+  }
+  .builder-stepper {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .builder-step-actions {
+    width: 100%;
+  }
+  .builder-step-actions button {
+    flex: 1;
   }
   .builder-savebar {
     position: static;

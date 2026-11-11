@@ -25,7 +25,7 @@ export type BasicRuleInput =
 export async function getBasicRuleOptions(
   originProfileId: number | null,
 ): Promise<BasicRuleOptions> {
-  const query = originProfileId === null ? '' : '?origin_profile_id=' + originProfileId
+  const query = originProfileId === null ? '' : '?rule_profile_id=' + originProfileId
   const response = await fetch('/api/v1/basic-rule-options' + query, { credentials: 'same-origin' })
   if (!response.ok)
     throw new Error('Не удалось загрузить базовые свойства вида и класса. HTTP ' + response.status)

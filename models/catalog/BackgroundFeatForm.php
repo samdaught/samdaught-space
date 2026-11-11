@@ -13,7 +13,7 @@ class BackgroundFeatForm extends Model
 {
     public $feat_entry_id = null;
 
-    public ?int $originProfileId = null;
+    public ?int $ruleProfileId = null;
 
     public function rules(): array
     {
@@ -27,7 +27,7 @@ class BackgroundFeatForm extends Model
             $this->addError($attribute, 'Выберите черту происхождения из списка.');
             return;
         }
-        $profile = $this->originProfileId === null ? null : RuleProfile::findOne($this->originProfileId);
+        $profile = $this->ruleProfileId === null ? null : RuleProfile::findOne($this->ruleProfileId);
         if ($profile === null) {
             $this->addError($attribute, 'Сначала выберите корректный профиль происхождения предыстории.');
             return;

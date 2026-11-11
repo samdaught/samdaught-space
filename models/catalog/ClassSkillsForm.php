@@ -14,7 +14,7 @@ class ClassSkillsForm extends Model
     public const MAX_OPTIONS = 100;
     public $class_skill_choice_count = null;
     public $class_skill_entry_ids = null;
-    public ?int $originProfileId = null;
+    public ?int $ruleProfileId = null;
 
     public function rules(): array
     {
@@ -52,7 +52,7 @@ class ClassSkillsForm extends Model
         if (!$this->hasErrors('class_skill_choice_count') && count($ids) < $this->class_skill_choice_count) {
             $this->addError($attribute, 'В разрешённом списке должно хватать навыков для всех выборов.');
         }
-        $profile = $this->originProfileId === null ? null : RuleProfile::findOne($this->originProfileId);
+        $profile = $this->ruleProfileId === null ? null : RuleProfile::findOne($this->ruleProfileId);
         if ($profile === null) {
             $this->addError($attribute, 'Выберите корректный профиль происхождения класса.');
             return;

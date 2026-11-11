@@ -1,17 +1,8 @@
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue'
-import { mechanicsInput, type EntryMechanics, type MechanicsOptions } from '../api/entryMechanics'
+import { computed } from 'vue'
+import type { EntryMechanics, MechanicsOptions } from '../api/entryMechanics'
 const props = defineProps<{ category: string; options: MechanicsOptions }>()
 const fields = defineModel<EntryMechanics>({ required: true })
-watch(
-  () => props.category,
-  (category) => {
-    const normalized = mechanicsInput(category, fields.value)
-    fields.value.spell = normalized.spell
-    fields.value.spellcasting = normalized.spellcasting
-  },
-  { immediate: true },
-)
 const sources = computed(() =>
   ['species', 'class', 'background', 'feat', 'feature', 'subclass', 'species_variant'].includes(
     props.category,
@@ -27,17 +18,6 @@ const traitValues = (kind: string) =>
     : (props.options.vocabulary ?? []).filter(
         (row) => row.kind === (kind === 'resistance' ? 'damage' : kind),
       )
-const listSearch = ref('')
-const filtered = (type: string) =>
-  available(type).filter((entry) =>
-    entry.title.toLocaleLowerCase().includes(listSearch.value.toLocaleLowerCase()),
-  )
-const counts = [
-  ['cantrip_count', 'Заговоров на первом уровне'],
-  ['known_count', 'Изученных заклинаний / записей в книге'],
-  ['prepared_count', 'Подготовленных заклинаний'],
-  ['slot_count', 'Ячеек первого круга'],
-] as const
 const spellTexts = [
   ['school', 'Школа'],
   ['casting_time', 'Время накладывания'],
@@ -81,55 +61,6 @@ const spellTexts = [
       :key="id"
       ><input v-model="fields.class_ids" type="checkbox" :value="id" />Недоступный класс №{{ id }} —
       снимите отметку</label
-    >
-  </fieldset>
-  <fieldset v-if="category === 'class' && fields.spellcasting">
-    <legend>Заклинательство класса на первом уровне</legend>
-    <label
-      ><input v-model="fields.spellcasting.enabled" type="checkbox" />Класс использует магию на
-      первом уровне</label
-    >
-    <template v-if="fields.spellcasting.enabled">
-      <label
-        >Магическая характеристика<select v-model="fields.spellcasting.ability_code" required>
-          <option :value="null" disabled>Выберите характеристику</option>
-          <option v-for="ability in options.abilities" :key="ability.code" :value="ability.code">
-            {{ ability.title }}
-          </option>
-        </select></label
-      >
-      <label v-for="[key, title] in counts" :key="key"
-        >{{ title
-        }}<input v-model.number="fields.spellcasting[key]" type="number" min="0" max="100" required
-      /></label>
-      <p>
-        Если изучаемый список не ограничен, укажите 0 изученных заклинаний: подготовка будет
-        доступна из всего списка класса. Если подготовка не требуется, укажите 0 подготовленных.
-      </p>
-    </template>
-    <h3>Список заклинаний класса</h3>
-    <p>
-      Можно связать и заклинания старших кругов; редактор первого уровня предложит заговоры и первый
-      круг.
-    </p>
-    <input
-      v-model="listSearch"
-      placeholder="Поиск по списку заклинаний"
-      aria-label="Поиск заклинаний класса"
-    />
-    <label v-for="entry in filtered('spell')" :key="entry.id"
-      ><input v-model="fields.spell_ids" type="checkbox" :value="entry.id" />{{ entry.title
-      }}{{ entry.is_published ? '' : ' (черновик)' }}</label
-    >
-    <label
-      v-for="id in fields.spell_ids.filter(
-        (id) => !available('spell').some((entry) => entry.id === id),
-      )"
-      :key="id"
-      ><input v-model="fields.spell_ids" type="checkbox" :value="id" />Недоступное заклинание №{{
-        id
-      }}
-      — снимите отметку</label
     >
   </fieldset>
   <fieldset v-if="sources || category === 'item'">

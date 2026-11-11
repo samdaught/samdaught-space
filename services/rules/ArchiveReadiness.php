@@ -32,6 +32,9 @@ final class ArchiveReadiness
         }
         if ($entry->type === 'item') {
             $kind = (new Query())->select('kind_code')->from('{{%item_definition}}')->where(['catalog_entry_id' => $entry->id])->scalar();
+            if ($data['item'] === null) {
+                $issues[] = 'Не заполнены стоимость и вес предмета.';
+            }
             if ($kind === 'weapon' && !($data['item']['weapon'] ?? null)) {
                 $issues[] = 'Не заполнены урон, свойства и мастерство оружия.';
             }

@@ -20,11 +20,123 @@ class Rulebook
     }
     public function read(int $id): array
     {
-        $data = (new Query())->select('data')->from('{{%entry_rulebook}}')->where(['entry_id' => $id])->scalar();
-        if (is_string($data)) {
-            $data = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
+        $rules = (new Query())->from('{{%entry_rules}}')->where(['entry_id' => $id])->one();
+        $data = self::empty();
+        if ($rules !== false && $rules !== null) {
+            $data = array_replace($data, [
+                'variant_required' => (bool) $rules['variant_required'],
+                'subclass_level' => (int) $rules['subclass_level'],
+                'feature_kind' => $rules['feature_kind'],
+                'repeatable' => (bool) $rules['repeatable'],
+                'casting_ability_code' => $rules['casting_ability_code'],
+                'casting_choice_code' => $rules['casting_choice_code'],
+                'prerequisites' => $this->json($rules['prerequisites'], RuleMath::condition()),
+                'ready' => (bool) $rules['ready'],
+            ]);
         }
-        return array_replace(self::empty(), $data ?: []);
+
+        $type = (new Query())->select('type')->from('{{%catalog_entry}}')->where(['id' => $id])->scalar();
+        if (in_array($type, ['subclass', 'species_variant'], true)) {
+            $table = $type === 'subclass' ? 'subclass_definition' : 'species_variant_definition';
+            $parent = $type === 'subclass' ? 'class_entry_id' : 'species_entry_id';
+            $definition = (new Query())->from('{{%' . $table . '}}')->where(['catalog_entry_id' => $id])->one();
+            if ($definition) {
+                $data['parent_entry_id'] = (int) $definition[$parent];
+                $data['selection_level'] = (int) $definition['selection_level'];
+            }
+        }
+
+        $choices = (new Query())->from('{{%entry_rule_choice}}')->where(['source_entry_id' => $id])->orderBy('code')->all();
+        foreach ($choices as $choice) {
+            $data['choices'][] = [
+                'code' => $choice['code'],
+                'title' => $choice['title'],
+                'kind' => $choice['kind'],
+                'count' => (int) $choice['choice_count'],
+                'values' => (new Query())->select('value')->from('{{%entry_rule_choice_value}}')
+                    ->where(['source_entry_id' => $id, 'choice_code' => $choice['code']])->orderBy('value')->column(),
+            ];
+        }
+        $data['distinct_choices'] = (new Query())->select('choice_code')->from('{{%entry_rule_distinct_choice}}')
+            ->where(['source_entry_id' => $id])->orderBy('choice_code')->column();
+        foreach ((new Query())->from('{{%entry_rule_effect}}')->where(['source_entry_id' => $id])->orderBy('id')->all() as $effect) {
+            $data['effects'][] = [
+                'target' => $effect['target'],
+                'target_entry_id' => $effect['target_entry_id'] === null ? null : (int) $effect['target_entry_id'],
+                'choice_code' => $effect['choice_code'],
+                'formula' => $this->json($effect['formula'], ['base' => 0, 'terms' => [], 'minimum' => null, 'maximum' => null]),
+                'condition' => $this->json($effect['condition'], RuleMath::condition()),
+            ];
+        }
+        $data['spell_list_class_ids'] = array_map('intval', (new Query())->select('class_entry_id')->from('{{%entry_spell_list_class}}')
+            ->where(['source_entry_id' => $id])->orderBy('class_entry_id')->column());
+        foreach ((new Query())->from('{{%entry_level_grant}}')->where(['source_entry_id' => $id])->orderBy(['level' => SORT_ASC, 'target_entry_id' => SORT_ASC])->all() as $grant) {
+            $data['unlocks'][] = ['entry_id' => (int) $grant['target_entry_id'], 'level' => (int) $grant['level'], 'level_basis' => $grant['level_basis']];
+        }
+        foreach ((new Query())->from('{{%class_level_rule}}')->where(['class_entry_id' => $id])->orderBy('level')->all() as $row) {
+            $data['progression'][] = [
+                'level' => (int) $row['level'],
+                'proficiency_bonus' => (int) $row['proficiency_bonus'],
+                'kind' => $row['kind'],
+                'cantrip_count' => (int) $row['cantrip_count'],
+                'known_count' => (int) $row['known_count'],
+                'prepared_count' => (int) $row['prepared_count'],
+                'pact_level' => (int) $row['pact_level'],
+                'recovery' => $row['recovery'],
+                'change_on' => $row['change_on'],
+                'slots' => array_map(static fn(array $slot): array => ['level' => (int) $slot['spell_level'], 'count' => (int) $slot['count']], (new Query())->select(['spell_level', 'count'])->from('{{%class_level_slot}}')->where(['class_entry_id' => $id, 'level' => $row['level']])->orderBy('spell_level')->all()),
+            ];
+        }
+        foreach ((new Query())->from('{{%entry_spell_grant}}')->where(['source_entry_id' => $id])->orderBy('code')->all() as $grant) {
+            $data['spell_grants'][] = [
+                'code' => $grant['code'], 'spell_id' => (int) $grant['spell_entry_id'], 'level' => (int) $grant['level'],
+                'level_basis' => $grant['level_basis'], 'always_prepared' => (bool) $grant['always_prepared'],
+                'count_against_limit' => (bool) $grant['count_against_limit'], 'cast_with_slots' => (bool) $grant['cast_with_slots'],
+                'free_uses' => $this->json($grant['free_uses'], ['base' => 0, 'terms' => [], 'minimum' => null, 'maximum' => null]),
+                'recovery' => $grant['recovery'], 'cast_level' => $grant['cast_level'] === null ? null : (int) $grant['cast_level'],
+            ];
+        }
+        foreach ((new Query())->from('{{%entry_spell_pick}}')->where(['source_entry_id' => $id])->orderBy('code')->all() as $pick) {
+            $data['spell_picks'][] = [
+                'code' => $pick['code'], 'title' => $pick['title'],
+                'class_ids' => array_map('intval', (new Query())->select('class_entry_id')->from('{{%entry_spell_pick_class}}')->where(['source_entry_id' => $id, 'pick_code' => $pick['code']])->orderBy('class_entry_id')->column()),
+                'list_choice_code' => $pick['list_choice_code'], 'spell_level' => (int) $pick['spell_level'], 'count' => (int) $pick['choice_count'],
+                'ability_choice_code' => $pick['ability_choice_code'], 'ability_code' => $pick['ability_code'],
+                'always_prepared' => (bool) $pick['always_prepared'], 'count_against_limit' => (bool) $pick['count_against_limit'],
+                'cast_with_slots' => (bool) $pick['cast_with_slots'],
+                'free_uses' => $this->json($pick['free_uses'], ['base' => 0, 'terms' => [], 'minimum' => null, 'maximum' => null]),
+                'recovery' => $pick['recovery'], 'cast_level' => $pick['cast_level'] === null ? null : (int) $pick['cast_level'],
+            ];
+        }
+        foreach ((new Query())->from('{{%entry_resource}}')->where(['source_entry_id' => $id])->orderBy('code')->all() as $resource) {
+            $data['resources'][] = [
+                'code' => $resource['code'], 'title' => $resource['title'],
+                'maximum' => $this->json($resource['maximum'], ['base' => 0, 'terms' => [], 'minimum' => null, 'maximum' => null]),
+                'recovery' => $resource['recovery'], 'level' => (int) $resource['level'],
+            ];
+        }
+        $item = (new Query())->from('{{%entry_item_rule}}')->where(['item_entry_id' => $id])->one();
+        if ($item) {
+            $magic = $item['magic_rarity'] === null ? null : [
+                'rarity' => $item['magic_rarity'], 'attunement' => (bool) $item['magic_attunement'],
+                'charges' => $this->json($item['magic_charges'], ['base' => 0, 'terms' => [], 'minimum' => null, 'maximum' => null]),
+                'recovery' => $item['magic_recovery'], 'plan_min_level' => (int) $item['magic_plan_min_level'],
+                'prerequisites' => $this->json($item['magic_prerequisites'], RuleMath::condition()),
+            ];
+            $data['item'] = ['cost_cp' => (int) $item['cost_cp'], 'weight_grams' => (int) $item['weight_grams'], 'weapon' => null, 'armor' => null, 'magic' => $magic];
+            $weapon = (new Query())->from('{{%weapon_definition}}')->where(['catalog_entry_id' => $id])->one();
+            if ($weapon) {
+                $data['item']['weapon'] = [
+                    'category' => $weapon['category'], 'damage_count' => (int) $weapon['damage_count'], 'damage_die' => (int) $weapon['damage_die'],
+                    'damage_type' => $weapon['damage_type'], 'properties' => (new Query())->select('code')->from('{{%weapon_property}}')->where(['item_entry_id' => $id])->orderBy('code')->column(),
+                    'mastery' => $weapon['mastery'], 'range_normal' => (int) $weapon['range_normal'], 'range_long' => (int) $weapon['range_long'], 'versatile_die' => $weapon['versatile_die'] === null ? null : (int) $weapon['versatile_die'],
+                ];
+            }
+            $armor = (new Query())->select(['category', 'strength_min', 'stealth_disadvantage'])->from('{{%armor_definition}}')->where(['catalog_entry_id' => $id])->one();
+            if ($armor) $data['item']['armor'] = ['category' => $armor['category'], 'strength_min' => (int) $armor['strength_min'], 'stealth_disadvantage' => (bool) $armor['stealth_disadvantage']];
+        }
+        $data['sources'] = (new Query())->from('{{%entry_source_reference}}')->where(['entry_id' => $id])->orderBy(['source_id' => SORT_ASC, 'page' => SORT_ASC])->all();
+        return $data;
     }
     public function options(?RuleProfile $profile): array
     {
@@ -38,7 +150,7 @@ class Rulebook
         }
         return ['entries' => $entries, 'vocabulary' => (new Query())->from('{{%rule_vocabulary}}')->orderBy(['kind' => SORT_ASC, 'title' => SORT_ASC])->all(), 'sources' => (new Query())->select(['id', 'title'])->from('{{%content_source}}')->orderBy('title')->all(), 'targets' => self::TARGETS, 'recovery' => self::RECOVERY, 'features' => self::FEATURES];
     }
-    public function validate(CatalogEntry $entry, $input): array
+    public function validate(CatalogEntry $entry, $input, ?string $pendingItemKind = null): array
     {
         if (!is_array($input) || array_diff(array_keys($input), array_keys(self::empty()))) {
             throw new \InvalidArgumentException('Неизвестные параметры правил книги.');
@@ -74,6 +186,9 @@ class Rulebook
         }
         if ($data['casting_ability_code'] !== null && !in_array($data['casting_ability_code'], ['str', 'dex', 'con', 'int', 'wis', 'cha'], true)) {
             throw new \InvalidArgumentException('Выберите магическую характеристику.');
+        }
+        if (($data['casting_ability_code'] !== null || $data['casting_choice_code'] !== null) && !in_array($entry->type, ['class', 'subclass'], true)) {
+            throw new \InvalidArgumentException('Магическая характеристика таблицы развития задаётся только у класса или подкласса.');
         }
         $codes = [];
         foreach ($data['choices'] as $choice) {
@@ -257,7 +372,7 @@ class Rulebook
             if (!is_array($data['item'])) {
                 throw new \InvalidArgumentException('Передайте параметры предмета.');
             }
-            $this->validateItem($entry, $data['item']);
+            $this->validateItem($entry, $data['item'], $pendingItemKind);
             if ($data['item']['magic'] !== null) {
                 $this->conditionReferences($data['item']['magic']['prerequisites'], $entry, $refs);
                 $this->formulaReferences($data['item']['magic']['charges'], $entry, $refs);
@@ -287,7 +402,7 @@ class Rulebook
         $this->checkCycles($entry, $data['unlocks']);
         return $data;
     }
-    private function validateItem(CatalogEntry $entry, array $item): void
+    private function validateItem(CatalogEntry $entry, array $item, ?string $pendingItemKind = null): void
     {
         if ($entry->type !== 'item') {
             throw new \InvalidArgumentException('Параметры предмета доступны только предмету.');
@@ -295,6 +410,13 @@ class Rulebook
         RuleMath::keys($item, ['cost_cp', 'weight_grams', 'weapon', 'armor', 'magic']);
         RuleMath::number($item['cost_cp'], 0, 1000000000);
         RuleMath::number($item['weight_grams'], 0, 1000000000);
+        $itemKind = $pendingItemKind ?? (new Query())->select('kind_code')->from('{{%item_definition}}')->where(['catalog_entry_id' => $entry->id])->scalar();
+        if ($item['weapon'] !== null && $itemKind !== 'weapon') {
+            throw new \InvalidArgumentException('Боевые свойства доступны только предмету вида «оружие».');
+        }
+        if ($item['armor'] !== null && !in_array($itemKind, ['armor', 'shield'], true)) {
+            throw new \InvalidArgumentException('Свойства доспеха доступны только броне или щиту.');
+        }
         if ($item['weapon'] !== null) {
             $w = $item['weapon'];
             RuleMath::keys($w, ['category', 'damage_count', 'damage_die', 'damage_type', 'properties', 'mastery', 'range_normal', 'range_long', 'versatile_die']);
@@ -350,7 +472,67 @@ class Rulebook
     private function saveNormalized(CatalogEntry $entry, array $data): void
     {
         $db = Yii::$app->db;
-        $db->createCommand()->upsert('{{%entry_rulebook}}', ['entry_id' => $entry->id, 'data' => new JsonExpression($data), 'ready' => $data['ready']])->execute();
+        $db->createCommand()->upsert('{{%entry_rules}}', [
+            'entry_id' => $entry->id,
+            'variant_required' => $data['variant_required'],
+            'subclass_level' => $data['subclass_level'],
+            'feature_kind' => $data['feature_kind'],
+            'repeatable' => $data['repeatable'],
+            'casting_ability_code' => $data['casting_ability_code'],
+            'casting_choice_code' => $data['casting_choice_code'],
+            'prerequisites' => new JsonExpression($data['prerequisites']),
+            'ready' => $data['ready'],
+        ])->execute();
+        foreach (['entry_rule_effect', 'entry_rule_distinct_choice', 'entry_rule_choice_value', 'entry_rule_choice', 'entry_spell_list_class', 'entry_spell_pick_class', 'entry_spell_pick'] as $table) {
+            $db->createCommand()->delete('{{%' . $table . '}}', ['source_entry_id' => $entry->id])->execute();
+        }
+        foreach ($data['choices'] as $choice) {
+            $db->createCommand()->insert('{{%entry_rule_choice}}', [
+                'source_entry_id' => $entry->id, 'code' => $choice['code'], 'title' => $choice['title'],
+                'kind' => $choice['kind'], 'choice_count' => $choice['count'],
+            ])->execute();
+            foreach ($choice['values'] as $value) {
+                $db->createCommand()->insert('{{%entry_rule_choice_value}}', [
+                    'source_entry_id' => $entry->id, 'choice_code' => $choice['code'], 'value' => $value,
+                ])->execute();
+            }
+        }
+        foreach ($data['distinct_choices'] as $code) {
+            $db->createCommand()->insert('{{%entry_rule_distinct_choice}}', ['source_entry_id' => $entry->id, 'choice_code' => $code])->execute();
+        }
+        foreach ($data['effects'] as $effect) {
+            $db->createCommand()->insert('{{%entry_rule_effect}}', [
+                'source_entry_id' => $entry->id, 'target' => $effect['target'], 'target_entry_id' => $effect['target_entry_id'],
+                'choice_code' => $effect['choice_code'], 'formula' => new JsonExpression($effect['formula']),
+                'condition' => new JsonExpression($effect['condition']),
+            ])->execute();
+        }
+        foreach ($data['spell_list_class_ids'] as $classId) {
+            $db->createCommand()->insert('{{%entry_spell_list_class}}', ['source_entry_id' => $entry->id, 'class_entry_id' => $classId])->execute();
+        }
+        foreach ($data['spell_picks'] as $pick) {
+            $classes = $pick['class_ids'];
+            unset($pick['class_ids']);
+            $pick['choice_count'] = $pick['count'];
+            unset($pick['count']);
+            $pick['free_uses'] = new JsonExpression($pick['free_uses']);
+            $db->createCommand()->insert('{{%entry_spell_pick}}', ['source_entry_id' => $entry->id] + $pick)->execute();
+            foreach ($classes as $classId) {
+                $db->createCommand()->insert('{{%entry_spell_pick_class}}', ['source_entry_id' => $entry->id, 'pick_code' => $pick['code'], 'class_entry_id' => $classId])->execute();
+            }
+        }
+        $db->createCommand()->delete('{{%entry_item_rule}}', ['item_entry_id' => $entry->id])->execute();
+        if ($entry->type === 'item' && $data['item'] !== null) {
+            $item = $data['item'];
+            $magic = $item['magic'];
+            $db->createCommand()->insert('{{%entry_item_rule}}', [
+                'item_entry_id' => $entry->id, 'cost_cp' => $item['cost_cp'], 'weight_grams' => $item['weight_grams'],
+                'magic_rarity' => $magic['rarity'] ?? null, 'magic_attunement' => $magic['attunement'] ?? null,
+                'magic_charges' => $magic === null ? null : new JsonExpression($magic['charges']),
+                'magic_recovery' => $magic['recovery'] ?? null, 'magic_plan_min_level' => $magic['plan_min_level'] ?? null,
+                'magic_prerequisites' => $magic === null ? null : new JsonExpression($magic['prerequisites']),
+            ])->execute();
+        }
         if (in_array($entry->type, ['subclass', 'species_variant'], true)) {
             $table = $entry->type === 'subclass' ? 'subclass_definition' : 'species_variant_definition';
             $parent = $entry->type === 'subclass' ? 'class_entry_id' : 'species_entry_id';
@@ -441,11 +623,19 @@ class Rulebook
             $db->createCommand()->insert('{{%entry_rule_reference}}', ['source_entry_id' => $entry->id, 'target_entry_id' => $id])->execute();
         }
     }
+    private function json($value, array $fallback): array
+    {
+        if (is_string($value)) {
+            $value = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+        }
+        return is_array($value) ? $value : $fallback;
+    }
+
     private function reference($id, array $types, CatalogEntry $entry, array &$refs): void
     {
         RuleMath::number($id, 1, 2147483647);
         $target = CatalogEntry::findOne($id);
-        $profile = RuleProfile::findOne($entry->origin_profile_id);
+        $profile = RuleProfile::findOne($entry->rule_profile_id);
         if (!$target || !in_array($target->type, $types, true) || !$profile || !(new CatalogAvailability())->hasCompatibleOrigin($target, $profile)) {
             throw new \InvalidArgumentException('Связанная запись имеет неподходящий тип или мир.');
         }

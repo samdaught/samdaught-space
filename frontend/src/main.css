@@ -402,107 +402,6 @@
   font: italic clamp(3rem, 7vw, 6rem)/1 var(--font-heading);
   color: var(--accent);
 }
-.editor-mode {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.45rem;
-  width: fit-content;
-  margin-block: 1.3rem;
-  background: var(--lavender);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.editor-mode legend {
-  padding-bottom: 0.5rem;
-  font-size: 0.8rem;
-}
-.editor-mode label {
-  display: inline-flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.55rem 0.9rem;
-  min-height: 44px;
-  cursor: pointer;
-  border-radius: 7px;
-  margin: 0;
-  font-weight: 500;
-  font-size: 0.86rem;
-}
-.editor-mode label:has(input:checked) {
-  background: var(--paper);
-  box-shadow: 0 2px 8px #35243e10;
-  color: var(--accent);
-}
-.editor-steps {
-  margin: 1.5rem 0;
-}
-.editor-steps ol {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0;
-}
-.editor-steps button {
-  font-size: 0.8rem;
-  border-color: transparent;
-  background: transparent;
-}
-.editor-steps [aria-current='step'] {
-  background: var(--ink);
-  color: var(--on-ink);
-}
-.character-form > fieldset,
-.character-form > section {
-  margin-block: 1.2rem;
-}
-.character-form > fieldset {
-  padding: clamp(1rem, 2.2vw, 2rem);
-}
-.character-form > fieldset > label {
-  max-width: 48rem;
-}
-.character-form > fieldset:first-child {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  column-gap: 1.5rem;
-}
-.character-form > fieldset:first-child > label {
-  grid-column: span 2;
-  max-width: none;
-}
-.character-form > fieldset:first-child > label:first-of-type,
-.character-form > fieldset:first-child > p,
-.character-form > fieldset:first-child > details {
-  grid-column: 1 / -1;
-}
-.character-form > fieldset:first-child > label:nth-of-type(2) {
-  grid-column: span 4;
-}
-.character-form .ability-fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-.ability-fields > p {
-  grid-column: 1 / -1;
-}
-.character-form > fieldset > legend {
-  font-size: 1.45rem;
-  font-family: var(--font-heading);
-}
-.character-form > section {
-  padding: 1.5rem;
-  background: var(--lavender);
-  border-radius: 12px;
-}
-.character-form > section h2 {
-  margin-top: 0;
-}
-.character-form > button[type='submit'] {
-  margin-top: 1rem;
-}
 .archive-entries {
   list-style: none;
   padding: 0;
@@ -573,10 +472,6 @@
     max-height: 285px;
     width: 240px;
   }
-  .character-form > fieldset:first-child,
-  .character-form .ability-fields {
-    display: block;
-  }
   .app-shell {
     display: block;
   }
@@ -633,15 +528,6 @@
   }
   .illustrated-state img {
     max-height: 350px;
-  }
-  .editor-steps ol {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .editor-steps button {
-    text-align: left;
-    width: 100%;
-    height: 100%;
   }
   .app-footer {
     font-size: 0.7rem;

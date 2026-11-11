@@ -327,8 +327,8 @@ class CreationBenefits
         $context['entry_ids'] = array_values(array_unique(array_merge($context['entry_ids'], array_keys($entries))));
         $context['proficiency_ids'] = array_map('intval', array_keys($proficient));
         $context['proficiencies'] = array_column(array_filter($traits, static fn($t) => in_array($t['kind'], ['armor', 'weapon', 'proficiency'], true)), 'value');
-        $classMagic = $character->class_entry_id === null ? null : (new Query())->from('{{%class_spellcasting}}')->where(['class_entry_id' => $character->class_entry_id])->one();
-        $context['spellcasting'] = ($classMagic['enabled'] ?? false) || !empty($sources);
+        $classMagic = $character->class_entry_id === null ? null : (new Query())->from('{{%class_level_rule}}')->where(['class_entry_id' => $character->class_entry_id, 'level' => $character->target_level])->one();
+        $context['spellcasting'] = (($classMagic['kind'] ?? 'none') !== 'none') || !empty($sources);
         $baseContext = $context;
         $abilityEffects = array_filter($effects, static fn($e) => str_starts_with($e['target'], 'ability_'));
         $otherEffects = array_filter($effects, static fn($e) => !str_starts_with($e['target'], 'ability_'));

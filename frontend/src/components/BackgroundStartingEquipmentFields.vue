@@ -39,8 +39,8 @@ function removeItem(index: number): void {
       Сохраняется ссылка на выбор инструмента персонажа. Дублировать его отдельной строкой не
       требуется.
     </p>
-    <p v-if="options.origin_profile_id === null">
-      Для выбора предметов укажите профиль происхождения.
+    <p v-if="options.rule_profile_id === null">
+      Для выбора предметов укажите мир записи.
     </p>
     <p v-else-if="options.equipment_item_options.length === 0">
       Нет доступных опубликованных предметов. Их можно добавить в архиве отдельно.
@@ -50,7 +50,7 @@ function removeItem(index: number): void {
         Предмет {{ index + 1 }}
         <select
           v-model="line.item_entry_id"
-          :disabled="options.origin_profile_id === null"
+          :disabled="options.rule_profile_id === null"
           required
         >
           <option disabled :value="null">Выберите предмет</option>
@@ -94,7 +94,7 @@ function removeItem(index: number): void {
     <button
       type="button"
       :disabled="
-        equipment.items.length >= options.equipment_max_items || options.origin_profile_id === null
+        equipment.items.length >= options.equipment_max_items || options.rule_profile_id === null
       "
       @click="addItem"
     >

@@ -19,9 +19,105 @@ class m261110_170000_expand_rulebook_catalog extends Migration
             $this->createIndex('ix_' . $table . '_parent', '{{%' . $table . '}}', $parent);
             $this->addCheck('ck_' . $table . '_level', '{{%' . $table . '}}', '[[selection_level]] BETWEEN 1 AND 20');
         }
-        $this->createTable('{{%entry_rulebook}}', ['entry_id' => $this->integer()->notNull(), 'data' => $this->json()->notNull(), 'ready' => $this->boolean()->notNull()->defaultValue(false)]);
-        $this->addPrimaryKey('pk_entry_rulebook', '{{%entry_rulebook}}', 'entry_id');
-        $this->addForeignKey('fk_entry_rulebook_entry', '{{%entry_rulebook}}', 'entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
+        $this->createTable('{{%entry_rules}}', [
+            'entry_id' => $this->integer()->notNull(),
+            'variant_required' => $this->boolean()->notNull()->defaultValue(false),
+            'subclass_level' => $this->smallInteger()->notNull()->defaultValue(3),
+            'feature_kind' => $this->string(32)->notNull()->defaultValue('general'),
+            'repeatable' => $this->boolean()->notNull()->defaultValue(false),
+            'casting_ability_code' => $this->string(3),
+            'casting_choice_code' => $this->string(32),
+            'prerequisites' => $this->json()->notNull(),
+            'ready' => $this->boolean()->notNull()->defaultValue(false),
+        ]);
+        $this->addPrimaryKey('pk_entry_rules', '{{%entry_rules}}', 'entry_id');
+        $this->addForeignKey('fk_entry_rules_entry', '{{%entry_rules}}', 'entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
+        $this->addForeignKey('fk_entry_rules_casting_ability', '{{%entry_rules}}', 'casting_ability_code', '{{%ability_definition}}', 'code', 'RESTRICT', 'RESTRICT');
+        $this->addCheck('ck_entry_rules_levels', '{{%entry_rules}}', '[[subclass_level]] BETWEEN 1 AND 20');
+        $this->addCheck('ck_entry_rules_feature_kind', '{{%entry_rules}}', "[[feature_kind]] IN ('general','class_feature','invocation','metamagic','maneuver','item_plan')");
+
+        $this->createTable('{{%entry_rule_choice}}', [
+            'source_entry_id' => $this->integer()->notNull(),
+            'code' => $this->string(32)->notNull(),
+            'title' => $this->string(255)->notNull(),
+            'kind' => $this->string(32)->notNull(),
+            'choice_count' => $this->smallInteger()->notNull(),
+        ]);
+        $this->addPrimaryKey('pk_entry_rule_choice', '{{%entry_rule_choice}}', ['source_entry_id', 'code']);
+        $this->addForeignKey('fk_entry_rule_choice_source', '{{%entry_rule_choice}}', 'source_entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
+        $this->addCheck('ck_entry_rule_choice_kind', '{{%entry_rule_choice}}', "[[kind]] IN ('ability','size','language','spell_list','mastery','weapon_mastery','proficiency') AND [[choice_count]] BETWEEN 1 AND 100");
+        $this->createTable('{{%entry_rule_choice_value}}', [
+            'source_entry_id' => $this->integer()->notNull(),
+            'choice_code' => $this->string(32)->notNull(),
+            'value' => $this->string(64)->notNull(),
+        ]);
+        $this->addPrimaryKey('pk_entry_rule_choice_value', '{{%entry_rule_choice_value}}', ['source_entry_id', 'choice_code', 'value']);
+        $this->addForeignKey('fk_entry_rule_choice_value_choice', '{{%entry_rule_choice_value}}', ['source_entry_id', 'choice_code'], '{{%entry_rule_choice}}', ['source_entry_id', 'code'], 'RESTRICT', 'RESTRICT');
+        $this->createTable('{{%entry_rule_distinct_choice}}', [
+            'source_entry_id' => $this->integer()->notNull(),
+            'choice_code' => $this->string(32)->notNull(),
+        ]);
+        $this->addPrimaryKey('pk_entry_rule_distinct_choice', '{{%entry_rule_distinct_choice}}', ['source_entry_id', 'choice_code']);
+        $this->addForeignKey('fk_entry_rule_distinct_choice_choice', '{{%entry_rule_distinct_choice}}', ['source_entry_id', 'choice_code'], '{{%entry_rule_choice}}', ['source_entry_id', 'code'], 'RESTRICT', 'RESTRICT');
+        $this->createTable('{{%entry_rule_effect}}', [
+            'id' => $this->primaryKey(),
+            'source_entry_id' => $this->integer()->notNull(),
+            'target' => $this->string(32)->notNull(),
+            'target_entry_id' => $this->integer(),
+            'choice_code' => $this->string(32),
+            'formula' => $this->json()->notNull(),
+            'condition' => $this->json()->notNull(),
+        ]);
+        $this->createIndex('ix_entry_rule_effect_source', '{{%entry_rule_effect}}', 'source_entry_id');
+        $this->addForeignKey('fk_entry_rule_effect_source', '{{%entry_rule_effect}}', 'source_entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
+        $this->addForeignKey('fk_entry_rule_effect_target', '{{%entry_rule_effect}}', 'target_entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
+        $this->createTable('{{%entry_spell_list_class}}', [
+            'source_entry_id' => $this->integer()->notNull(),
+            'class_entry_id' => $this->integer()->notNull(),
+        ]);
+        $this->addPrimaryKey('pk_entry_spell_list_class', '{{%entry_spell_list_class}}', ['source_entry_id', 'class_entry_id']);
+        $this->addForeignKey('fk_entry_spell_list_class_source', '{{%entry_spell_list_class}}', 'source_entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
+        $this->addForeignKey('fk_entry_spell_list_class_class', '{{%entry_spell_list_class}}', 'class_entry_id', '{{%class_definition}}', 'catalog_entry_id', 'RESTRICT', 'RESTRICT');
+        $this->createTable('{{%entry_spell_pick}}', [
+            'source_entry_id' => $this->integer()->notNull(),
+            'code' => $this->string(32)->notNull(),
+            'title' => $this->string(255)->notNull(),
+            'list_choice_code' => $this->string(32),
+            'spell_level' => $this->smallInteger()->notNull(),
+            'choice_count' => $this->smallInteger()->notNull(),
+            'ability_choice_code' => $this->string(32),
+            'ability_code' => $this->string(3),
+            'always_prepared' => $this->boolean()->notNull(),
+            'count_against_limit' => $this->boolean()->notNull(),
+            'cast_with_slots' => $this->boolean()->notNull(),
+            'free_uses' => $this->json()->notNull(),
+            'recovery' => $this->string(16)->notNull(),
+            'cast_level' => $this->smallInteger(),
+        ]);
+        $this->addPrimaryKey('pk_entry_spell_pick', '{{%entry_spell_pick}}', ['source_entry_id', 'code']);
+        $this->addForeignKey('fk_entry_spell_pick_source', '{{%entry_spell_pick}}', 'source_entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
+        $this->addForeignKey('fk_entry_spell_pick_ability', '{{%entry_spell_pick}}', 'ability_code', '{{%ability_definition}}', 'code', 'RESTRICT', 'RESTRICT');
+        $this->createTable('{{%entry_spell_pick_class}}', [
+            'source_entry_id' => $this->integer()->notNull(),
+            'pick_code' => $this->string(32)->notNull(),
+            'class_entry_id' => $this->integer()->notNull(),
+        ]);
+        $this->addPrimaryKey('pk_entry_spell_pick_class', '{{%entry_spell_pick_class}}', ['source_entry_id', 'pick_code', 'class_entry_id']);
+        $this->addForeignKey('fk_entry_spell_pick_class_pick', '{{%entry_spell_pick_class}}', ['source_entry_id', 'pick_code'], '{{%entry_spell_pick}}', ['source_entry_id', 'code'], 'RESTRICT', 'RESTRICT');
+        $this->addForeignKey('fk_entry_spell_pick_class_class', '{{%entry_spell_pick_class}}', 'class_entry_id', '{{%class_definition}}', 'catalog_entry_id', 'RESTRICT', 'RESTRICT');
+        $this->createTable('{{%entry_item_rule}}', [
+            'item_entry_id' => $this->integer()->notNull(),
+            'cost_cp' => $this->integer()->notNull(),
+            'weight_grams' => $this->integer()->notNull(),
+            'magic_rarity' => $this->string(16),
+            'magic_attunement' => $this->boolean(),
+            'magic_charges' => $this->json(),
+            'magic_recovery' => $this->string(16),
+            'magic_plan_min_level' => $this->smallInteger(),
+            'magic_prerequisites' => $this->json(),
+        ]);
+        $this->addPrimaryKey('pk_entry_item_rule', '{{%entry_item_rule}}', 'item_entry_id');
+        $this->addForeignKey('fk_entry_item_rule_item', '{{%entry_item_rule}}', 'item_entry_id', '{{%item_definition}}', 'catalog_entry_id', 'RESTRICT', 'RESTRICT');
         $this->createTable('{{%entry_rule_reference}}', ['source_entry_id' => $this->integer()->notNull(), 'target_entry_id' => $this->integer()->notNull()]);
         $this->addPrimaryKey('pk_entry_rule_reference', '{{%entry_rule_reference}}', ['source_entry_id', 'target_entry_id']);
         foreach (['source_entry_id', 'target_entry_id'] as $column) {
@@ -113,7 +209,7 @@ class m261110_170000_expand_rulebook_catalog extends Migration
             $this->dropForeignKey('fk_character_' . $column, '{{%character}}');
             $this->dropColumn('{{%character}}', $column);
         }
-        foreach (['entry_source_reference', 'weapon_property', 'weapon_definition', 'entry_spell_grant', 'entry_resource', 'rule_vocabulary', 'class_level_slot', 'class_level_rule', 'entry_level_grant', 'entry_rule_reference', 'entry_rulebook', 'species_variant_definition', 'subclass_definition'] as $table) {
+        foreach (['entry_source_reference', 'weapon_property', 'weapon_definition', 'entry_item_rule', 'entry_spell_pick_class', 'entry_spell_pick', 'entry_spell_list_class', 'entry_rule_effect', 'entry_rule_distinct_choice', 'entry_rule_choice_value', 'entry_rule_choice', 'entry_spell_grant', 'entry_resource', 'rule_vocabulary', 'class_level_slot', 'class_level_rule', 'entry_level_grant', 'entry_rule_reference', 'entry_rules', 'species_variant_definition', 'subclass_definition'] as $table) {
             $this->dropTable('{{%' . $table . '}}');
         }
         foreach (['category', 'strength_min', 'stealth_disadvantage'] as $column) {

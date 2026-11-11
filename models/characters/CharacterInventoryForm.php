@@ -29,7 +29,7 @@ class CharacterInventoryForm extends Model
             return;
         }
         if ($this->profile === null) {
-            $this->addError($attribute, 'Профиль правил персонажа недоступен.');
+            $this->addError($attribute, 'Мир правил персонажа недоступен.');
             return;
         }
         $rowIds = [];
@@ -66,7 +66,7 @@ class CharacterInventoryForm extends Model
         foreach ($entryIds as $id) {
             $entry = $options->lockAndFind($id);
             if ($entry === null || !$availability->isAvailableInProfile($entry, $this->profile)) {
-                $this->addError($attribute, 'В инвентаре есть недоступный предмет. Выберите опубликованные предметы с определением, разрешённые профилю персонажа.');
+                $this->addError($attribute, 'В инвентаре есть недоступный предмет. Выберите опубликованные предметы с определением, доступные в мире персонажа.');
                 return;
             }
         }

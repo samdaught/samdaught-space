@@ -146,8 +146,6 @@ export type CharacterSheetBasics = {
   class_skill_revision: number
   class_skill_effective_entry_ids: number[]
   class_skills_complete: boolean
-  supported_level: number
-  calculation_supported: boolean
   baseline_complete: boolean
   ability_totals: Record<string, number | null>
   proficiency_bonus: number | null

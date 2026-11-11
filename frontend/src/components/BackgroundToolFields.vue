@@ -24,8 +24,8 @@ const mode = computed({
       </select>
     </label>
     <template v-if="mode === 'fixed'">
-      <p v-if="options.origin_profile_id === null">
-        Сначала выберите профиль происхождения записи.
+      <p v-if="options.rule_profile_id === null">
+        Сначала выберите мир записи.
       </p>
       <p v-else-if="options.tool_options.length === 0">
         Нет доступных опубликованных инструментов. Сначала создайте предмет с видом «Инструмент» и
@@ -35,7 +35,7 @@ const mode = computed({
         Инструмент
         <select
           v-model="target.tool_entry_id"
-          :disabled="options.origin_profile_id === null"
+          :disabled="options.rule_profile_id === null"
           required
         >
           <option disabled :value="null">Выберите инструмент</option>

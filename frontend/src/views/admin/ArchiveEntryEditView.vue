@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import RuleField from '../../components/RuleField.vue'
 import SpeciesEditorFields from '../../components/SpeciesEditorFields.vue'
 import ClassEditorFields from '../../components/ClassEditorFields.vue'
 import SpellEditorFields from '../../components/SpellEditorFields.vue'
 import { emptySpeciesCard } from '../../api/speciesCard'
 import { emptyClassCard } from '../../api/classCard'
-import { rulebookSchema, emptyRulebook } from '../../api/rulebook'
+import { emptyRulebook } from '../../api/rulebook'
 import { useRulebook } from '../../composables/useRulebook'
 import EntryMechanicsFields from '../../components/EntryMechanicsFields.vue'
+import ItemRuleFields from '../../components/ItemRuleFields.vue'
 import { useEntryMechanics } from '../../composables/useEntryMechanics'
 import { emptyMechanics } from '../../api/entryMechanics'
 import { onMounted, ref } from 'vue'
@@ -51,8 +51,6 @@ import { getAbilityDefinitions, type AbilityDefinition } from '../../api/ability
 
 import CreationRuleFields from '../../components/CreationRuleFields.vue'
 import { useCreationRuleFields } from '../../composables/useCreationRuleFields'
-
-import ProfileAvailabilityFields from '../../components/ProfileAvailabilityFields.vue'
 
 import { useFormChanges } from '../../composables/useFormChanges'
 
@@ -103,7 +101,7 @@ const basicRuleFields = ref<BasicRuleDraft>({
 const basicRulesLoading = ref(false)
 const basicRulesError = ref('')
 const creation = useCreationRuleFields(
-  () => entry.value?.origin_profile_id ?? null,
+  () => entry.value?.rule_profile_id ?? null,
   () => entry.value?.type ?? '',
 )
 
@@ -112,7 +110,7 @@ async function loadBasicRuleOptions(): Promise<void> {
   basicRulesLoading.value = true
   basicRulesError.value = ''
   try {
-    basicRuleOptions.value = await getBasicRuleOptions(entry.value?.origin_profile_id ?? null)
+    basicRuleOptions.value = await getBasicRuleOptions(entry.value?.rule_profile_id ?? null)
     const codes = basicRuleFields.value.class_saving_throw_codes
     basicRuleFields.value.class_saving_throw_codes = Array.from(
       { length: basicRuleOptions.value.required_saving_throw_count },
@@ -174,11 +172,11 @@ const form = ref<CatalogEntryUpdateInput>({
 })
 
 const mechanics = useEntryMechanics(
-  () => entry.value?.origin_profile_id ?? null,
+  () => entry.value?.rule_profile_id ?? null,
   () => entry.value?.type ?? '',
 )
 const rulebook = useRulebook(
-  () => entry.value?.origin_profile_id ?? null,
+  () => entry.value?.rule_profile_id ?? null,
   () => entry.value?.type ?? '',
 )
 
@@ -611,19 +609,24 @@ async function submit() {
           {{ rulebook.error.value }}
           <button type="button" @click="rulebook.load()">Повторить</button>
         </p>
-        <RuleField
-          v-if="!['species', 'class', 'spell'].includes(entry.type) && rulebook.options.value"
-          v-model="rulebook.fields.value"
-          :schema="rulebookSchema(entry.type)"
-          :options="rulebook.options.value"
-          :disabled="saving"
-        />
+        <section v-if="!['species', 'class', 'spell', 'item'].includes(entry.type) && rulebook.options.value" class="rules-check">
+          <h2>Проверка правил</h2>
+          <p>Описание и указанные выше выдачи — единственные правила этой записи. Отметьте после проверки.</p>
+          <label><input v-model="rulebook.fields.value.ready" type="checkbox" />Правила записи заполнены и проверены</label>
+        </section>
         <p v-if="mechanics.error.value" role="alert">
           {{ mechanics.error.value }}
           <button type="button" @click="mechanics.load()">Повторить загрузку механики</button>
         </p>
+        <ItemRuleFields
+          v-if="entry.type === 'item' && mechanics.options.value && rulebook.ready.value"
+          v-model:mechanics="mechanics.fields.value"
+          v-model:rulebook="rulebook.fields.value"
+          :item-kind="itemFields.item_kind_code"
+          :options="mechanics.options.value"
+        />
         <EntryMechanicsFields
-          v-if="!['species', 'class', 'spell'].includes(entry.type) && mechanics.options.value"
+          v-if="!['species', 'class', 'spell', 'item'].includes(entry.type) && mechanics.options.value"
           v-model="mechanics.fields.value"
           :category="entry.type"
           :options="mechanics.options.value"
@@ -637,13 +640,7 @@ async function submit() {
           :options="mechanics.options.value"
         >
           <template #advanced>
-            <RuleField
-              v-if="rulebook.options.value"
-              v-model="rulebook.fields.value"
-              :schema="rulebookSchema('spell')"
-              :options="rulebook.options.value"
-              :disabled="saving"
-            />
+            <label><input v-model="rulebook.fields.value.ready" type="checkbox" />Правила доступности заклинания заполнены и проверены</label>
           </template>
         </SpellEditorFields>
         <SpeciesEditorFields
@@ -716,7 +713,6 @@ async function submit() {
       <p v-if="submitError" role="alert">{{ submitError }}</p>
       <p v-if="saved" role="status">Изменения сохранены.</p>
     </form>
-    <ProfileAvailabilityFields :key="entry.id" :entry-id="entry.id" />
   </template>
 </template>
 

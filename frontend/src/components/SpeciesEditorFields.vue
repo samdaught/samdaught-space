@@ -5,7 +5,6 @@ import type { BasicRuleDraft, BasicRuleOptions } from '../api/basicRules'
 import type { CreationRuleDraft, CreationRuleOptions } from '../api/creationRules'
 import type { EntryMechanics, MechanicsOptions } from '../api/entryMechanics'
 import {
-  rulebookSchema,
   type RulebookData,
   type RulebookOptions,
   type RuleValue,
@@ -13,7 +12,6 @@ import {
 import SpeciesCardContent from './SpeciesCardContent.vue'
 import SpeciesChoiceFields from './SpeciesChoiceFields.vue'
 import CreationRuleFields from './CreationRuleFields.vue'
-import RuleField from './RuleField.vue'
 import EntryMechanicsFields from './EntryMechanicsFields.vue'
 
 const props = defineProps<{
@@ -31,7 +29,6 @@ const creation = defineModel<CreationRuleDraft>('creation', { required: true })
 const mechanics = defineModel<EntryMechanics>('mechanics', { required: true })
 const rulebook = defineModel<RulebookData>('rulebook', { required: true })
 const preview = ref(false)
-const advanced = ref(false)
 let revealingInvalid = false
 async function revealInvalid(event: Event): Promise<void> {
   if (!preview.value && !revealingInvalid) return
@@ -96,24 +93,6 @@ function addChoice(type: string, title: string): void {
       .map((entry) => entry.id),
   })
 }
-const advancedSchema = computed(() => {
-  const schema = rulebookSchema('species')
-  const omitted = [
-    'subclass_level',
-    'feature_kind',
-    'repeatable',
-    'distinct_choices',
-    'casting_ability_code',
-    'spell_list_class_ids',
-  ]
-  return {
-    ...schema,
-    title: 'Дополнительные правила расы',
-    fields: Object.fromEntries(
-      Object.entries(schema.fields ?? {}).filter(([key]) => !omitted.includes(key)),
-    ),
-  }
-})
 </script>
 
 <template>
@@ -346,20 +325,16 @@ const advancedSchema = computed(() => {
       </section>
     </div>
 
-    <details
-      class="species-advanced"
-      @toggle="advanced = ($event.target as HTMLDetailsElement).open"
-    >
-      <summary>Дополнительные настройки механики</summary>
+    <section class="species-section">
+      <h3>Автоматические эффекты</h3>
       <p class="field-hint">
-        Автоматические бонусы, языки, сопротивления, врождённая магия и способности по уровням.
+        Добавьте постоянные бонусы, языки, сопротивления, врождённую магию, фиксированные выдачи и
+        выборы. Условные эффекты оставьте в описании особенности.
       </p>
-      <div v-if="advanced">
-        <EntryMechanicsFields v-model="mechanics" category="species" :options="mechanicsOptions" />
-        <CreationRuleFields v-model="creation" :options="creationOptions" />
-        <RuleField v-model="rulebook" :schema="advancedSchema" :options="rulebookOptions" />
-      </div>
-    </details>
+      <EntryMechanicsFields v-model="mechanics" category="species" :options="mechanicsOptions" />
+      <CreationRuleFields v-model="creation" :options="creationOptions" />
+      <label class="rules-ready"><input v-model="rulebook.ready" type="checkbox" />Автоматические правила вида заполнены и проверены</label>
+    </section>
   </section>
 </template>
 
@@ -465,14 +440,12 @@ const advancedSchema = computed(() => {
   gap: 0.8rem;
   margin-top: 1rem;
 }
-.species-advanced {
-  margin-top: 1.4rem;
-  padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.species-advanced summary {
-  min-height: 28px;
+.rules-ready {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: 1rem;
+  font-weight: 650;
 }
 @media (max-width: 600px) {
   .species-field-row {

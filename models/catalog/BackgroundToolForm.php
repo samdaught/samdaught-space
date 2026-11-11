@@ -11,7 +11,7 @@ use yii\base\Model;
 class BackgroundToolForm extends Model
 {
     public $background_tool = null;
-    public ?int $originProfileId = null;
+    public ?int $ruleProfileId = null;
 
     public function rules(): array
     {
@@ -42,7 +42,7 @@ class BackgroundToolForm extends Model
             $this->addError($attribute, 'Выберите инструмент из списка.');
             return;
         }
-        $profile = $this->originProfileId === null ? null : RuleProfile::findOne($this->originProfileId);
+        $profile = $this->ruleProfileId === null ? null : RuleProfile::findOne($this->ruleProfileId);
         if ($profile === null) {
             $this->addError($attribute, 'Сначала выберите корректный профиль происхождения предыстории.');
             return;

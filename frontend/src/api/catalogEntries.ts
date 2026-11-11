@@ -63,7 +63,7 @@ export type NewCatalogEntry = {
   type: string
   slug?: string
   title: string
-  origin_profile_id: number
+  rule_profile_id: number
   source_id: number | null
   body: string
 }
@@ -93,7 +93,7 @@ export type CatalogEntry = {
   type: string
   slug: string
   title: string
-  origin_profile_id: number
+  rule_profile_id: number
   source_id: number | null
   body: string | null
 }
@@ -227,12 +227,58 @@ export async function createCatalogEntry(input: NewCatalogEntry): Promise<Catalo
   return result.data
 }
 
+export async function copyCatalogEntryToWorld(
+  id: number,
+  ruleProfileId: number,
+): Promise<CatalogEntry> {
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]')
+  const csrf = csrfMeta?.getAttribute('content')
+
+  if (!csrf) {
+    throw new Error('CSRF-токен не найден')
+  }
+
+  const response = await fetch(`/api/v1/catalog-entries/${id}/copy-to-world`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf,
+    },
+    body: JSON.stringify({ rule_profile_id: ruleProfileId }),
+  })
+
+  if (response.status === 422) {
+    const result = (await response.json()) as ValidationErrorResponse
+    const firstMessage = Object.values(result.error.fields)[0]?.[0]
+
+    throw new Error(firstMessage ?? result.error.message)
+  }
+
+  if (!response.ok) {
+    const result = (await response.json().catch(() => null)) as {
+      message?: string
+      error?: { message?: string }
+    } | null
+
+    throw new Error(
+      result?.error?.message ?? result?.message ?? 'Не удалось скопировать запись. HTTP ' + response.status,
+    )
+  }
+
+  const result = (await response.json()) as CreatedCatalogEntryResponse
+
+  return result.data
+}
+
 export type CatalogEntryListItem = {
   mechanics_status?: 'ready' | 'partial' | 'text'
   id: number
   title: string
   type: string
   type_title: string
+  rule_profile_id: number
+  rule_profile_title: string
   is_published: boolean
 }
 

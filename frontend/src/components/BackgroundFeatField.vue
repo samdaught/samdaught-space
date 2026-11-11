@@ -6,11 +6,11 @@ const id = defineModel<number | null>({ required: true })
 </script>
 
 <template>
-  <fieldset :disabled="options.origin_profile_id === null">
+  <fieldset :disabled="options.rule_profile_id === null">
     <legend>Черта от предыстории</legend>
-    <p v-if="options.origin_profile_id === null">Сначала выберите профиль происхождения записи.</p>
+    <p v-if="options.rule_profile_id === null">Сначала выберите мир записи.</p>
     <p v-else-if="options.feat_options.length === 0">
-      В этом профиле нет опубликованных черт категории «Происхождение». Сначала создайте и
+      В этом мире нет опубликованных черт категории «Происхождение». Сначала создайте и
       опубликуйте черту.
     </p>
     <label>

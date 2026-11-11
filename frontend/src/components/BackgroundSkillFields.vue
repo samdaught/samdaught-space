@@ -6,11 +6,11 @@ const ids = defineModel<Array<number | null>>({ required: true })
 </script>
 
 <template>
-  <fieldset :disabled="options.origin_profile_id === null">
+  <fieldset :disabled="options.rule_profile_id === null">
     <legend>Владения навыками от предыстории</legend>
-    <p v-if="options.origin_profile_id === null">Сначала выберите профиль происхождения записи.</p>
+    <p v-if="options.rule_profile_id === null">Сначала выберите мир записи.</p>
     <p v-else-if="options.skill_options.length === 0">
-      В этом профиле нет опубликованных навыков с настроенной характеристикой. Сначала создайте и
+      В этом мире нет опубликованных навыков с настроенной характеристикой. Сначала создайте и
       опубликуйте записи навыков.
     </p>
     <p>Выберите разные навыки, владение которыми предусмотрено этой предысторией.</p>

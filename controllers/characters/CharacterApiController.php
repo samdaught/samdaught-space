@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace app\controllers\characters;
 
-use Yii;
-use yii\web\UnauthorizedHttpException;
-
-use yii\filters\AccessControl;
-use yii\filters\VerbFilter;
-
 use app\controllers\ApiController;
 use app\models\characters\Character;
 use app\models\rules\RuleProfile;
+use app\services\characters\CharacterEditor;
+use app\services\characters\CharacterEditorValidationException;
+use Yii;
+use yii\filters\AccessControl;
+use yii\filters\VerbFilter;
+use yii\web\BadRequestHttpException;
+use yii\web\NotFoundHttpException;
+use yii\web\UnauthorizedHttpException;
 
 class CharacterApiController extends ApiController
 {
@@ -76,7 +78,7 @@ class CharacterApiController extends ApiController
         $pageCount = max(1, (int) ceil($total / $perPage));
 
         if ($page > $pageCount) {
-            throw new \yii\web\NotFoundHttpException('Страница списка не найдена.');
+            throw new NotFoundHttpException('Страница списка не найдена.');
         }
 
         $characters = $query
@@ -110,10 +112,40 @@ class CharacterApiController extends ApiController
     {
         return $this->editorResponse(function (): array {
             $data = Yii::$app->request->getBodyParams();
-            if (is_array($data))$data=array_replace(['rule_choices'=>[],'base_scores'=>null,'background_increases'=>null],$data);
-            if (!is_array($data) || count($data) !== 6 || array_diff(['context', 'creation_choices', 'class_skill_entry_ids'], array_keys($data)) || !is_array($data['context']) || array_diff(array_keys($data['context']), \app\services\characters\CharacterEditor::CONTEXT_FIELDS)) throw new \yii\web\BadRequestHttpException('Передайте контекст и локальные выборы редактора.');
-            foreach(['rule_choices','base_scores','background_increases'] as $field)if($data[$field]!==null&&!is_array($data[$field]))throw new \yii\web\BadRequestHttpException('Передайте массив значений редактора.');
-            return (new \app\services\characters\CharacterEditor())->options($data['context'], Yii::$app->user->id, $data['creation_choices'], $data['class_skill_entry_ids'], $data['rule_choices'], $data['base_scores'], $data['background_increases']);
+
+            if (is_array($data)) {
+                $data = array_replace([
+                    'rule_choices' => [],
+                    'base_scores' => null,
+                    'background_increases' => null,
+                ], $data);
+            }
+
+            if (
+                !is_array($data)
+                || count($data) !== 6
+                || array_diff(['context', 'creation_choices', 'class_skill_entry_ids'], array_keys($data))
+                || !is_array($data['context'])
+                || array_diff(array_keys($data['context']), CharacterEditor::CONTEXT_FIELDS)
+            ) {
+                throw new BadRequestHttpException('Передайте контекст и локальные выборы редактора.');
+            }
+
+            foreach (['rule_choices', 'base_scores', 'background_increases'] as $field) {
+                if ($data[$field] !== null && !is_array($data[$field])) {
+                    throw new BadRequestHttpException('Передайте массив значений редактора.');
+                }
+            }
+
+            return (new CharacterEditor())->options(
+                $data['context'],
+                Yii::$app->user->id,
+                $data['creation_choices'],
+                $data['class_skill_entry_ids'],
+                $data['rule_choices'],
+                $data['base_scores'],
+                $data['background_increases'],
+            );
         });
     }
 
@@ -124,7 +156,9 @@ class CharacterApiController extends ApiController
 
     public function actionView(int $id): array
     {
-        return $this->editorResponse(fn(): array => (new \app\services\characters\CharacterEditor())->read($id, Yii::$app->user->id));
+        return $this->editorResponse(
+            fn(): array => (new CharacterEditor())->read($id, Yii::$app->user->id),
+        );
     }
 
     public function actionUpdate(int $id): array
@@ -135,8 +169,18 @@ class CharacterApiController extends ApiController
     public function actionDelete(int $id): array
     {
         $data = Yii::$app->request->getBodyParams();
-        if (!is_array($data) || array_keys($data) !== ['revision'] || !is_int($data['revision']) || $data['revision'] < 1 || $data['revision'] > 2147483647) throw new \yii\web\BadRequestHttpException('Передайте текущую revision листа.');
-        (new \app\services\characters\CharacterEditor())->delete($id, Yii::$app->user->id, $data['revision']);
+        if (
+            !is_array($data)
+            || array_keys($data) !== ['revision']
+            || !is_int($data['revision'])
+            || $data['revision'] < 1
+            || $data['revision'] > 2147483647
+        ) {
+            throw new BadRequestHttpException('Передайте текущую revision листа.');
+        }
+
+        (new CharacterEditor())->delete($id, Yii::$app->user->id, $data['revision']);
+
         return ['data' => ['deleted' => true]];
     }
 
@@ -144,19 +188,31 @@ class CharacterApiController extends ApiController
     {
         return $this->editorResponse(function () use ($id): array {
             $data = Yii::$app->request->getBodyParams();
-            if (!is_array($data)) throw new \yii\web\BadRequestHttpException('Передайте объект редактора персонажа.');
-            $state = (new \app\services\characters\CharacterEditor())->save($data, Yii::$app->user->id, $id);
+            if (!is_array($data)) {
+                throw new BadRequestHttpException('Передайте объект редактора персонажа.');
+            }
+
+            $state = (new CharacterEditor())->save($data, Yii::$app->user->id, $id);
             Yii::$app->response->statusCode = $id === null ? 201 : 200;
+
             return $state;
         });
     }
 
     private function editorResponse(callable $operation): array
     {
-        try { return ['data' => $operation()]; }
-        catch (\app\services\characters\CharacterEditorValidationException $error) {
+        try {
+            return ['data' => $operation()];
+        } catch (CharacterEditorValidationException $error) {
             Yii::$app->response->statusCode = 422;
-            return ['error' => ['code' => 'VALIDATION_FAILED', 'message' => $error->getMessage(), 'fields' => $error->fields]];
+
+            return [
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => $error->getMessage(),
+                    'fields' => $error->fields,
+                ],
+            ];
         }
     }
 }

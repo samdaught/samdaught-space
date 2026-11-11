@@ -35,7 +35,7 @@ try {
         'type' => 'class',
         'title' => 'Проверка карточки класса',
         'body' => 'Класс для решительных героев.',
-        'origin_profile_id' => $profile->id,
+        'rule_profile_id' => $profile->id,
     ]);
     $entry->revision = 1;
     $card = [
@@ -47,7 +47,6 @@ try {
     ];
     $mechanics = EntryMechanics::empty();
     $mechanics['traits'] = [['kind' => 'weapon', 'value' => 'simple'], ['kind' => 'weapon', 'value' => 'martial']];
-    $mechanics['spellcasting'] = ['enabled' => false, 'ability_code' => null, 'cantrip_count' => 0, 'known_count' => 0, 'prepared_count' => 0, 'slot_count' => 0];
     $data = [
         'class_card' => $card,
         'class_hit_die_sides' => 12,

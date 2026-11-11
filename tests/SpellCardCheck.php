@@ -32,7 +32,7 @@ try {
     $save = new ReflectionMethod($controller, 'saveEntry');
     $make = static function (string $type, string $title) use ($profile): CatalogEntry {
         $entry = new CatalogEntry();
-        $entry->setAttributes(['type' => $type, 'title' => $title, 'body' => "Эффект заклинания.\nНа более высоких уровнях — дополнительный эффект.", 'origin_profile_id' => $profile->id]);
+        $entry->setAttributes(['type' => $type, 'title' => $title, 'body' => "Эффект заклинания.\nНа более высоких уровнях — дополнительный эффект.", 'rule_profile_id' => $profile->id]);
         $entry->revision = 1;
         return $entry;
     };

@@ -65,7 +65,7 @@ class BackgroundAbilityApiController extends ApiController
 
     public function actionOptions(): array
     {
-        $input = Yii::$app->request->get('origin_profile_id');
+        $input = Yii::$app->request->get('rule_profile_id');
         $profile = null;
         if ($input !== null) {
             $id = filter_var($input, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -124,14 +124,14 @@ class BackgroundAbilityApiController extends ApiController
             ->orderBy(['ability_code' => SORT_ASC])
             ->column();
 
-        if ($background !== null) $profile = RuleProfile::findOne($background->origin_profile_id);
+        if ($background !== null) $profile = RuleProfile::findOne($background->rule_profile_id);
         $skillIds = $background === null ? [] : BackgroundSkillProficiency::find()->select('skill_entry_id')
             ->where(['background_entry_id' => $background->id])->orderBy(['skill_entry_id' => SORT_ASC])->column();
         $featLink = $background === null ? null : BackgroundFeat::findOne(['background_entry_id' => $background->id]);
         $toolRule = $background === null ? null : BackgroundToolProficiency::findOne($background->id);
 
         return [
-            'origin_profile_id' => $profile === null ? null : $profile->id,
+            'rule_profile_id' => $profile === null ? null : $profile->id,
             'required_count' => BackgroundAbilityOptionsForm::REQUIRED_COUNT,
             'ability_options' => AbilityDefinition::find()
                 ->select(['code', 'title'])

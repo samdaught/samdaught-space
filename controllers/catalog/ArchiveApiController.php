@@ -60,7 +60,7 @@ class ArchiveApiController extends ApiController
     {
         return CatalogEntry::find()->alias('entry')
             ->innerJoin(['category' => CatalogEntryType::tableName()], '[[category.code]] = [[entry.type]]')
-            ->innerJoin(['profile' => RuleProfile::tableName()], '[[profile.id]] = [[entry.origin_profile_id]]')
+            ->innerJoin(['profile' => RuleProfile::tableName()], '[[profile.id]] = [[entry.rule_profile_id]]')
             ->leftJoin(['source' => ContentSource::tableName()], '[[source.id]] = [[entry.source_id]]')
             ->where(['entry.is_published' => true])
             ->select(['entry.id', 'entry.slug', 'entry.title', 'entry.type', 'entry.body',

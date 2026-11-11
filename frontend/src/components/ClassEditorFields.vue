@@ -4,11 +4,11 @@ import type { ClassCard } from '../api/classCard'
 import type { BasicRuleDraft, BasicRuleOptions } from '../api/basicRules'
 import type { CreationRuleDraft, CreationRuleOptions } from '../api/creationRules'
 import type { EntryMechanics, MechanicsOptions } from '../api/entryMechanics'
-import { rulebookSchema, type RulebookData, type RulebookOptions } from '../api/rulebook'
+import type { RulebookData, RulebookOptions } from '../api/rulebook'
 import ClassCardContent from './ClassCardContent.vue'
 import CreationRuleFields from './CreationRuleFields.vue'
 import EntryMechanicsFields from './EntryMechanicsFields.vue'
-import RuleField from './RuleField.vue'
+import ClassAdvancementFields from './ClassAdvancementFields.vue'
 
 const props = defineProps<{
   title: string
@@ -25,7 +25,6 @@ const creation = defineModel<CreationRuleDraft>('creation', { required: true })
 const mechanics = defineModel<EntryMechanics>('mechanics', { required: true })
 const rulebook = defineModel<RulebookData>('rulebook', { required: true })
 const preview = ref(false)
-const advanced = ref(false)
 let revealingInvalid = false
 const abilityTitles = computed(() => props.basicOptions.ability_options)
 const training = computed({
@@ -68,17 +67,6 @@ async function revealInvalid(event: Event): Promise<void> {
     field.reportValidity()
   }
 }
-const advancedSchema = computed(() => {
-  const schema = rulebookSchema('class')
-  const omitted = ['subclass_level', 'feature_kind', 'repeatable', 'distinct_choices']
-  return {
-    ...schema,
-    title: 'Дополнительные правила класса',
-    fields: Object.fromEntries(
-      Object.entries(schema.fields ?? {}).filter(([key]) => !omitted.includes(key)),
-    ),
-  }
-})
 </script>
 
 <template>
@@ -311,24 +299,18 @@ const advancedSchema = computed(() => {
         </label>
       </section>
     </div>
-    <details class="class-advanced" @toggle="advanced = ($event.target as HTMLDetailsElement).open">
-      <summary>Дополнительные настройки механики</summary>
+    <section class="class-section">
+      <ClassAdvancementFields v-model="rulebook" v-model:spell-ids="mechanics.spell_ids" :entries="rulebookOptions.entries" />
+    </section>
+    <section class="class-section">
+      <h3>Дополнительные выдачи и стартовое снаряжение</h3>
       <p class="field-hint">
-        Заклинательства, стартовые комплекты, точные эффекты, выдачи по уровням и технические
-        правила.
+        Добавьте только то, что класс выдаёт при создании: фиксированные особенности, выборы и
+        стартовые комплекты. Остальное развитие задано выше по уровням.
       </p>
-      <div v-if="advanced">
-        <EntryMechanicsFields
-          v-model="mechanics"
-          category="class"
-          :options="mechanicsOptions"
-        /><CreationRuleFields v-model="creation" :options="creationOptions" /><RuleField
-          v-model="rulebook"
-          :schema="advancedSchema"
-          :options="rulebookOptions"
-        />
-      </div>
-    </details>
+      <CreationRuleFields v-model="creation" :options="creationOptions" />
+      <EntryMechanicsFields v-model="mechanics" category="class" :options="mechanicsOptions" />
+    </section>
   </section>
 </template>
 
@@ -420,16 +402,6 @@ const advancedSchema = computed(() => {
   border: 1px dashed var(--line-strong);
   border-radius: 8px;
   color: var(--muted);
-}
-.class-advanced {
-  margin-top: 1.2rem;
-  padding: 1rem;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-}
-.class-advanced summary {
-  cursor: pointer;
-  font-weight: 700;
 }
 .class-preview {
   margin-top: 1rem;

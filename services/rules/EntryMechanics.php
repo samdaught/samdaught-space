@@ -16,7 +16,7 @@ class EntryMechanics
     public const MAGIC_CODES = ['magic_cantrips', 'magic_known', 'magic_prepared'];
     public static function empty(): array
     {
-        return ['bonuses' => [], 'traits' => [], 'equipment' => [], 'spell' => null, 'spellcasting' => null, 'spell_ids' => [], 'class_ids' => [], 'armor' => null, 'innate_ability_code' => null, 'unarmored_defense' => null];
+        return ['bonuses' => [], 'traits' => [], 'equipment' => [], 'spell' => null, 'spell_ids' => [], 'class_ids' => [], 'armor' => null, 'innate_ability_code' => null, 'unarmored_defense' => null];
     }
     public function read(CatalogEntry $entry): array
     {
@@ -29,7 +29,6 @@ class EntryMechanics
             $data['class_ids'] = (new Query())->select('class_entry_id')->from('{{%class_spell}}')->where(['spell_entry_id' => $entry->id])->orderBy('class_entry_id')->column();
         }
         if ($entry->type === 'class') {
-            $data['spellcasting'] = (new Query())->select(['enabled', 'ability_code', 'cantrip_count', 'known_count', 'prepared_count', 'slot_count'])->from('{{%class_spellcasting}}')->where(['class_entry_id' => $entry->id])->one() ?: null;
             $data['spell_ids'] = (new Query())->select('spell_entry_id')->from('{{%class_spell}}')->where(['class_entry_id' => $entry->id])->orderBy('spell_entry_id')->column();
         }
         if ($entry->type === 'item') {
@@ -64,7 +63,7 @@ class EntryMechanics
         }
         return ['entries' => $entries, 'abilities' => AbilityDefinition::find()->select(['code', 'title'])->orderBy('code')->asArray()->all(), 'bonuses' => self::BONUSES, 'traits' => self::TRAITS,'vocabulary'=>(new Query())->from('{{%rule_vocabulary}}')->all()];
     }
-    public function validate(CatalogEntry $entry, $data): array
+    public function validate(CatalogEntry $entry, $data, ?string $pendingItemKind = null): array
     {
         $this->keys($data, array_keys(self::empty()));
         foreach (['bonuses', 'traits', 'equipment', 'class_ids', 'spell_ids'] as $key) {
@@ -138,23 +137,17 @@ class EntryMechanics
             $this->check($data['spell'] === null && !$data['class_ids'], 'Параметры заклинания задаются только у заклинания.');
         }
         if ($entry->type === 'class') {
-            $casting = $data['spellcasting'];
-            $this->keys($casting, ['enabled', 'ability_code', 'cantrip_count', 'known_count', 'prepared_count', 'slot_count']);
-            $this->check(is_bool($casting['enabled']), 'Укажите, использует ли класс магию на первом уровне.');
-            foreach (['cantrip_count', 'known_count', 'prepared_count', 'slot_count'] as $key) {
-                $this->integer($casting[$key], 0, 100);
-            }
-            $this->check($casting['enabled'] ? is_string($casting['ability_code']) && AbilityDefinition::find()->where(['code' => $casting['ability_code']])->exists() : $casting['ability_code'] === null && array_sum(array_intersect_key($casting, array_flip(['cantrip_count', 'known_count', 'prepared_count', 'slot_count']))) === 0, 'Укажите магическую характеристику; для немагического класса количества должны быть нулевыми.');
-            $this->check(!$casting['known_count'] || $casting['prepared_count'] <= $casting['known_count'], 'Нельзя подготовить больше заклинаний, чем изучено.');
             foreach ($data['spell_ids'] as $id) {
                 $this->reference($id, 'spell', $entry);
             }
             $this->check(count($data['spell_ids']) === count(array_unique($data['spell_ids'])), 'Заклинания не должны повторяться.');
         } else {
-            $this->check($data['spellcasting'] === null && !$data['spell_ids'], 'Список заклинаний и заклинательство задаются только у класса.');
+            $this->check(!$data['spell_ids'], 'Список заклинаний задаётся только у класса.');
         }
         if ($data['armor'] !== null) {
             $this->check($entry->type === 'item', 'Защита задаётся только у предмета.');
+            $itemKind = $pendingItemKind ?? (new Query())->select('kind_code')->from('{{%item_definition}}')->where(['catalog_entry_id' => $entry->id])->scalar();
+            $this->check(in_array($itemKind, ['armor', 'shield'], true), 'КД задаётся только у брони или щита.');
             $this->keys($data['armor'], ['base_ac', 'dexterity_cap', 'is_shield']);
             $this->integer($data['armor']['base_ac'], 0, 30);
             if ($data['armor']['dexterity_cap'] !== null) {
@@ -218,7 +211,6 @@ class EntryMechanics
                 $oldLinks=(new Query())->select('spell_entry_id')->from('{{%class_spell}}')->where(['class_entry_id'=>$entry->id])->column();
                 $changedPeers=array_unique(array_merge(array_diff($oldLinks,$data['spell_ids']),array_diff($data['spell_ids'],$oldLinks)));
                 if($changedPeers)$db->createCommand()->update('{{%catalog_entry}}',['revision'=>new \yii\db\Expression('[[revision]] + 1')],['id'=>$changedPeers])->execute();
-                $db->createCommand()->upsert('{{%class_spellcasting}}', ['class_entry_id' => $entry->id] + $data['spellcasting'])->execute();
                 $db->createCommand()->delete('{{%class_spell}}', ['class_entry_id' => $entry->id])->execute();
                 foreach ($data['spell_ids'] as $id) {
                     $db->createCommand()->insert('{{%class_spell}}', ['class_entry_id' => $entry->id, 'spell_entry_id' => $id])->execute();
@@ -239,7 +231,7 @@ class EntryMechanics
         Yii::$app->db->createCommand('SELECT [[id]] FROM {{%catalog_entry}} WHERE [[id]]=:id FOR SHARE', [':id' => $id])->queryScalar();
         $entry = CatalogEntry::findOne($id);
         $this->check($entry !== null && $entry->type === $type, 'Выберите связанную запись подходящей категории.');
-        $profile = RuleProfile::findOne($reverse ? $entry->origin_profile_id : $source->origin_profile_id);
+        $profile = RuleProfile::findOne($reverse ? $entry->rule_profile_id : $source->rule_profile_id);
         $this->check($profile !== null && (new CatalogAvailability())->hasCompatibleOrigin($reverse ? $source : $entry, $profile), 'Связанная запись недоступна в мире источника.');
         $table = ['class' => 'class_definition', 'spell' => 'spell_definition', 'item' => 'item_definition'][$type];
         $this->check((new Query())->from('{{%' . $table . '}}')->where(['catalog_entry_id' => $id])->exists(), 'Сначала настройте механику связанной записи.');

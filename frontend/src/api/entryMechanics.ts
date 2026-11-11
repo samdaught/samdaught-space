@@ -12,14 +12,6 @@ export type EntryMechanics = {
     items: { item_entry_id: number; quantity: number }[]
   }[]
   spell: SpellDefinition | null
-  spellcasting: {
-    enabled: boolean
-    ability_code: string | null
-    cantrip_count: number
-    known_count: number
-    prepared_count: number
-    slot_count: number
-  } | null
   spell_ids: number[]
   class_ids: number[]
   armor: { base_ac: number; dexterity_cap: number | null; is_shield: boolean } | null
@@ -39,7 +31,6 @@ export function emptyMechanics(): EntryMechanics {
     traits: [],
     equipment: [],
     spell: null,
-    spellcasting: null,
     spell_ids: [],
     class_ids: [],
     armor: null,
@@ -63,19 +54,6 @@ export function mechanicsInput(category: string, data: EntryMechanics): EntryMec
     traits: source ? data.traits : [],
     equipment: source ? data.equipment : [],
     spell: category === 'spell' ? (data.spell ?? emptySpell()) : null,
-    spellcasting:
-      category === 'class'
-        ? data.spellcasting?.enabled
-          ? data.spellcasting
-          : {
-              enabled: false,
-              ability_code: null,
-              cantrip_count: 0,
-              known_count: 0,
-              prepared_count: 0,
-              slot_count: 0,
-            }
-        : null,
     class_ids: category === 'spell' ? data.class_ids : [],
     spell_ids: category === 'class' ? data.spell_ids : [],
     armor: category === 'item' ? data.armor : null,
@@ -83,7 +61,7 @@ export function mechanicsInput(category: string, data: EntryMechanics): EntryMec
 }
 export async function getMechanicsOptions(profile: number | null): Promise<MechanicsOptions> {
   const response = await fetch(
-    '/api/v1/entry-mechanics/options' + (profile === null ? '' : '?origin_profile_id=' + profile),
+    '/api/v1/entry-mechanics/options' + (profile === null ? '' : '?rule_profile_id=' + profile),
     { credentials: 'same-origin' },
   )
   if (!response.ok)
