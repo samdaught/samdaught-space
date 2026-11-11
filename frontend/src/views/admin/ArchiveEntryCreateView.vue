@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import RuleField from '../../components/RuleField.vue'
-import { rulebookSchema, emptyRulebook } from '../../api/rulebook'
+import SpeciesEditorFields from '../../components/SpeciesEditorFields.vue'
+import ClassEditorFields from '../../components/ClassEditorFields.vue'
+import SpellEditorFields from '../../components/SpellEditorFields.vue'
+import { emptySpeciesCard } from '../../api/speciesCard'
+import { emptyClassCard } from '../../api/classCard'
+import { rulebookSchema } from '../../api/rulebook'
 import { useRulebook } from '../../composables/useRulebook'
 import EntryMechanicsFields from '../../components/EntryMechanicsFields.vue'
 import { useEntryMechanics } from '../../composables/useEntryMechanics'
-import { emptyMechanics } from '../../api/entryMechanics'
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getRuleProfiles, type RuleProfile } from '../../api/ruleProfiles'
@@ -23,7 +27,6 @@ import FeatCategoryField from '../../components/FeatCategoryField.vue'
 import BackgroundFeatField from '../../components/BackgroundFeatField.vue'
 import BackgroundToolFields from '../../components/BackgroundToolFields.vue'
 import ItemDefinitionFields from '../../components/ItemDefinitionFields.vue'
-import BasicRuleDefinitionFields from '../../components/BasicRuleDefinitionFields.vue'
 import {
   getBasicRuleOptions,
   getBasicRuleInput,
@@ -54,6 +57,8 @@ import { useFormChanges } from '../../composables/useFormChanges'
 import { afterSuccessfulSave } from '../../composables/useUnsavedChanges'
 
 const router = useRouter()
+const speciesCard = ref(emptySpeciesCard())
+const classCard = ref(emptyClassCard())
 
 const form = ref({
   type: '',
@@ -122,6 +127,8 @@ const rulebook = useRulebook(
 const changes = useFormChanges(
   () => [
     form.value,
+    speciesCard.value,
+    classCard.value,
     abilityCodes.value,
     skillEntryIds.value,
     skillAbilityCode.value,
@@ -240,6 +247,8 @@ async function loadAbilityOptions() {
 watch(
   () => form.value.type,
   (type) => {
+    if (type === 'species' && basicRuleFields.value.species_speed_feet === '')
+      basicRuleFields.value.species_speed_feet = 30
     if (type === 'background') void loadAbilityOptions()
     if (type === 'skill' && skillAbilities.value.length === 0) void loadSkillAbilityOptions()
     if (type === 'feat' && featCategories.value.length === 0) void loadFeatCategories()
@@ -394,6 +403,8 @@ async function submit() {
   }
 
   const input: NewCatalogEntry = {
+    ...(form.value.type === 'species' ? { species_card: speciesCard.value } : {}),
+    ...(form.value.type === 'class' ? { class_card: classCard.value } : {}),
     mechanics: mechanics.input.value,
     rulebook: rulebook.fields.value,
     ...(creation.input.value === undefined ? {} : { creation_rules: creation.input.value }),
@@ -474,7 +485,7 @@ async function submit() {
         </label>
 
         <label>
-          Происхождение
+          Мир / набор правил
           <select
             v-model="originProfileId"
             :disabled="optionsLoading || optionsError !== ''"
@@ -499,7 +510,7 @@ async function submit() {
           </select>
         </label>
 
-        <label>
+        <label v-if="!['species', 'class', 'spell'].includes(form.type)">
           Описание
           <textarea v-model="form.body"></textarea>
         </label>
@@ -565,12 +576,6 @@ async function submit() {
             {{ basicRulesError }}
             <button type="button" @click="loadBasicRuleOptions">Повторить загрузку</button>
           </p>
-          <BasicRuleDefinitionFields
-            v-if="basicRuleOptions"
-            v-model="basicRuleFields"
-            :options="basicRuleOptions"
-            :category="form.type"
-          />
         </section>
         <section v-if="form.type === 'item'">
           <p v-if="itemLoading" role="status">Загружаем свойства предметов…</p>
@@ -593,7 +598,12 @@ async function submit() {
           </button>
         </p>
         <CreationRuleFields
-          v-if="creation.ready.value && creation.supported.value && creation.options.value"
+          v-if="
+            !['species', 'class'].includes(form.type) &&
+            creation.ready.value &&
+            creation.supported.value &&
+            creation.options.value
+          "
           v-model="creation.fields.value"
           :options="creation.options.value"
         />
@@ -603,7 +613,7 @@ async function submit() {
           <button type="button" @click="rulebook.load()">Повторить</button>
         </p>
         <RuleField
-          v-if="rulebook.options.value"
+          v-if="!['species', 'class', 'spell'].includes(form.type) && rulebook.options.value"
           v-model="rulebook.fields.value"
           :schema="rulebookSchema(form.type)"
           :options="rulebook.options.value"
@@ -614,10 +624,73 @@ async function submit() {
           <button type="button" @click="mechanics.load()">Повторить загрузку механики</button>
         </p>
         <EntryMechanicsFields
-          v-if="mechanics.options.value"
+          v-if="!['species', 'class', 'spell'].includes(form.type) && mechanics.options.value"
           v-model="mechanics.fields.value"
           :category="form.type"
           :options="mechanics.options.value"
+        />
+        <SpellEditorFields
+          v-if="form.type === 'spell' && mechanics.ready.value && mechanics.options.value"
+          v-model="mechanics.fields.value"
+          v-model:body="form.body"
+          :title="form.title"
+          :options="mechanics.options.value"
+        >
+          <template #advanced>
+            <RuleField
+              v-if="rulebook.options.value"
+              v-model="rulebook.fields.value"
+              :schema="rulebookSchema('spell')"
+              :options="rulebook.options.value"
+              :disabled="saving"
+            />
+          </template>
+        </SpellEditorFields>
+        <SpeciesEditorFields
+          v-if="
+            form.type === 'species' &&
+            basicRuleOptions &&
+            creation.ready.value &&
+            creation.options.value &&
+            mechanics.ready.value &&
+            mechanics.options.value &&
+            rulebook.ready.value &&
+            rulebook.options.value
+          "
+          v-model="speciesCard"
+          v-model:body="form.body"
+          v-model:basic="basicRuleFields"
+          v-model:creation="creation.fields.value"
+          v-model:mechanics="mechanics.fields.value"
+          v-model:rulebook="rulebook.fields.value"
+          :title="form.title"
+          :basic-options="basicRuleOptions"
+          :creation-options="creation.options.value"
+          :mechanics-options="mechanics.options.value"
+          :rulebook-options="rulebook.options.value"
+        />
+        <ClassEditorFields
+          v-if="
+            form.type === 'class' &&
+            basicRuleOptions &&
+            creation.ready.value &&
+            creation.options.value &&
+            mechanics.ready.value &&
+            mechanics.options.value &&
+            rulebook.ready.value &&
+            rulebook.options.value
+          "
+          v-model="classCard"
+          v-model:body="form.body"
+          v-model:basic="basicRuleFields"
+          v-model:creation="creation.fields.value"
+          v-model:mechanics="mechanics.fields.value"
+          v-model:rulebook="rulebook.fields.value"
+          :title="form.title"
+          :basic-options="basicRuleOptions"
+          :creation-options="creation.options.value"
+          :mechanics-options="mechanics.options.value"
+          :rulebook-options="rulebook.options.value"
         />
         <button
           type="submit"

@@ -2,6 +2,9 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getArchiveEntry, type ArchiveDetails } from '../api/archive'
+import SpeciesCardContent from '../components/SpeciesCardContent.vue'
+import ClassCardContent from '../components/ClassCardContent.vue'
+import SpellCardContent from '../components/SpellCardContent.vue'
 const route = useRoute(),
   entry = ref<ArchiveDetails | null>(null),
   error = ref(''),
@@ -47,7 +50,21 @@ watch(() => route.params.id, load, { immediate: true })
   <article v-else-if="entry" class="reading-page">
     <p class="eyebrow">{{ entry.type_title }} · {{ entry.profile_title }}</p>
     <h1>{{ entry.title }}</h1>
-    <p class="preserve-lines">{{ entry.body }}</p>
+    <SpeciesCardContent
+      v-if="entry.species_card"
+      :card="entry.species_card"
+      :body="entry.body ?? ''"
+      :title="entry.title"
+    />
+    <ClassCardContent
+      v-else-if="entry.class_card && entry.class_details"
+      :card="entry.class_card"
+      :details="entry.class_details"
+      :body="entry.body ?? ''"
+      :title="entry.title"
+    />
+    <SpellCardContent v-else-if="entry.spell" :spell="entry.spell" :body="entry.body ?? ''" />
+    <p v-else class="preserve-lines">{{ entry.body }}</p>
     <footer v-if="entry.source_title" class="entry-source">
       Источник:
       <a v-if="sourceUrl" :href="sourceUrl" target="_blank" rel="noopener noreferrer">{{

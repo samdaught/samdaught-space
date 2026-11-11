@@ -1,3 +1,7 @@
+import type { SpeciesCard } from './speciesCard'
+import type { ClassCard, ClassDetails } from './classCard'
+import type { SpellDefinition } from './spells'
+
 export type ArchiveEntry = {
   id: number
   slug: string
@@ -9,6 +13,10 @@ export type ArchiveEntry = {
   excerpt: string
 }
 export type ArchiveDetails = ArchiveEntry & {
+  spell?: SpellDefinition | null
+  species_card?: SpeciesCard | null
+  class_card?: ClassCard | null
+  class_details?: ClassDetails | null
   body: string | null
   source_url: string | null
   attribution_text: string | null

@@ -1,4 +1,6 @@
 import type { RulebookData } from './rulebook'
+import type { SpeciesCard } from './speciesCard'
+import type { ClassCard } from './classCard'
 import type { EntryMechanics } from './entryMechanics'
 import type { PaginationMeta } from './pagination'
 import type { CreationRuleInput } from './creationRules'
@@ -37,6 +39,8 @@ export async function getCatalogEntryTypes(): Promise<CatalogEntryType[]> {
 }
 
 export type NewCatalogEntry = {
+  species_card?: SpeciesCard
+  class_card?: ClassCard
   rulebook?: RulebookData
   revision?: number
   mechanics?: EntryMechanics
@@ -65,6 +69,8 @@ export type NewCatalogEntry = {
 }
 
 export type CatalogEntry = {
+  species_card?: SpeciesCard | null
+  class_card?: ClassCard | null
   rulebook?: RulebookData
   revision?: number
   mechanics?: EntryMechanics
@@ -101,6 +107,8 @@ export type CatalogEntryDetails = CatalogEntry & {
 }
 
 export type CatalogEntryUpdateInput = {
+  species_card?: SpeciesCard
+  class_card?: ClassCard
   rulebook?: RulebookData
   revision?: number
   mechanics?: EntryMechanics

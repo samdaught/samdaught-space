@@ -1,8 +1,20 @@
 <script setup lang="ts">
+import SpeciesCardContent from './SpeciesCardContent.vue'
+import ClassCardContent from './ClassCardContent.vue'
+import type { SpeciesCard } from '../api/speciesCard'
+import type { ClassCard, ClassDetails } from '../api/classCard'
+
 defineProps<{
   title: string
   entries: { id: number; title: string }[]
-  origin: { id: number; title: string; body: string | null } | null
+  origin: {
+    id: number
+    title: string
+    body: string | null
+    species_card?: SpeciesCard | null
+    class_card?: ClassCard | null
+    class_details?: ClassDetails | null
+  } | null
   disabled: boolean
 }>()
 const selected = defineModel<number | null>({ required: true })
@@ -37,7 +49,22 @@ const selected = defineModel<number | null>({ required: true })
     <article class="origin-description" :aria-label="`Описание: ${title}`">
       <template v-if="origin && origin.id === selected">
         <h3>{{ origin.title }}</h3>
-        <p class="origin-body">{{ origin.body || 'Описание в архиве пока не добавлено.' }}</p>
+        <SpeciesCardContent
+          v-if="origin.species_card"
+          :card="origin.species_card"
+          :title="origin.title"
+          :body="origin.body ?? ''"
+        />
+        <ClassCardContent
+          v-else-if="origin.class_card && origin.class_details"
+          :card="origin.class_card"
+          :details="origin.class_details"
+          :title="origin.title"
+          :body="origin.body ?? ''"
+        />
+        <p v-else class="origin-body">
+          {{ origin.body || 'Описание в архиве пока не добавлено.' }}
+        </p>
         <RouterLink :to="`/archive/${origin.id}`" target="_blank" rel="noopener"
           >Подробнее в архиве ↗</RouterLink
         >

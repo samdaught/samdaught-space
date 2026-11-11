@@ -233,6 +233,13 @@ class CharacterEditor
         foreach (['species_entry_id', 'class_entry_id', 'background_entry_id', 'subclass_entry_id', 'species_variant_entry_id'] as $field) {
             $entry = $character->$field === null ? null : (new \app\services\rules\CreationRules())->findAvailable($character->$field, $profile);
             $origins[$field] = $entry === null ? null : $entry->getAttributes(['id', 'title', 'body']);
+            if ($entry !== null && $entry->type === 'species') {
+                $origins[$field]['species_card'] = (new \app\services\rules\SpeciesCard())->read($entry->id);
+            }
+            if ($entry !== null && $entry->type === 'class') {
+                $origins[$field]['class_card'] = (new \app\services\rules\ClassCard())->read($entry->id);
+                $origins[$field]['class_details'] = (new \app\services\rules\ClassCard())->details($entry);
+            }
         }
         $options = ['species' => [], 'class' => [], 'background' => [], 'subclass'=>[], 'species_variant'=>[]];
         if ($profile !== null) {

@@ -1,3 +1,7 @@
+import type { SpeciesCard } from '../api/speciesCard'
+import type { SpellDefinition } from '../api/spells'
+import type { ClassCard, ClassDetails } from '../api/classCard'
+
 export type CharacterAbilityScore = {
   code: string
   title: string
@@ -287,7 +291,14 @@ export type CharacterEditorOptions = {
   profile_title: string | null
   origins: Record<
     'species_entry_id' | 'class_entry_id' | 'background_entry_id',
-    { id: number; title: string; body: string | null } | null
+    {
+      id: number
+      title: string
+      body: string | null
+      species_card?: SpeciesCard | null
+      class_card?: ClassCard | null
+      class_details?: ClassDetails | null
+    } | null
   >
 }
 export type CharacterEditorState = CharacterEditorOptions & {
@@ -375,7 +386,13 @@ export type CreationBenefits = {
     title: string
     count: number
     mode: string
-    options: { id: number; type: string; title: string }[]
+    options: {
+      id: number
+      type: string
+      title: string
+      body?: string | null
+      spell?: SpellDefinition | null
+    }[]
     selected_entry_ids: number[]
   }[]
   entries: {
@@ -383,16 +400,7 @@ export type CreationBenefits = {
     type: string
     title: string
     body: string | null
-    spell?: {
-      level: number
-      school: string
-      casting_time: string
-      range_text: string
-      components: string
-      duration: string
-      concentration: boolean
-      ritual: boolean
-    }
+    spell?: SpellDefinition | null
   }[]
   skill_entry_ids: number[]
   proficient_skill_entry_ids: number[]

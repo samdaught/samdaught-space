@@ -159,7 +159,17 @@ class CreationBenefits
             }
             $selected = $choices[$key] ?? [];
             $valid = count($selected) <= $choice['count'] && !array_diff($selected, array_keys($options));
-            $groups[$key] = ['key' => $key, 'source_title' => $source->title, 'title' => $choice['title'], 'count' => $choice['count'], 'mode' => $choice['mode'], 'options' => array_map(static fn($entry) => $entry->getAttributes(['id', 'type', 'title']), array_values($options)), 'selected_entry_ids' => $selected];
+            $spellIds = array_keys(array_filter($options, static fn($entry) => $entry->type === 'spell'));
+            $spells = $spellIds ? (new Query())->from('{{%spell_definition}}')->where(['catalog_entry_id' => $spellIds])->indexBy('catalog_entry_id')->all() : [];
+            $optionData = array_map(static function ($entry) use ($spells): array {
+                $data = $entry->getAttributes(['id', 'type', 'title']);
+                if ($entry->type === 'spell') {
+                    $data['body'] = $entry->body;
+                    $data['spell'] = $spells[$entry->id] ?? null;
+                }
+                return $data;
+            }, array_values($options));
+            $groups[$key] = ['key' => $key, 'source_title' => $source->title, 'title' => $choice['title'], 'count' => $choice['count'], 'mode' => $choice['mode'], 'options' => $optionData, 'selected_entry_ids' => $selected];
             if (!$valid) {
                 $errors[] = 'Группа «' . $choice['title'] . '»: выберите допустимые записи.';
             }

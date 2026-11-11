@@ -371,9 +371,11 @@ class CatalogEntryApiController extends ApiController
         if ($entry->type === 'species') {
             $definition = SpeciesDefinition::findOne($entry->id);
             $data['species_speed_feet'] = $definition === null ? null : $definition->speed_feet;
+            $data['species_card'] = (new \app\services\rules\SpeciesCard())->read($entry->id);
         }
         if ($entry->type === 'class') {
             $definition = ClassDefinition::findOne($entry->id);
+            $data['class_card'] = (new \app\services\rules\ClassCard())->read($entry->id);
             $data['class_hit_die_sides'] = $definition === null ? null : $definition->hit_die_sides;
             $data['class_skill_choice_count'] = $definition === null ? null : $definition->skill_choice_count;
             $data['class_skill_entry_ids'] = ClassSkillOption::find()->select('skill_entry_id')
@@ -607,6 +609,26 @@ class CatalogEntryApiController extends ApiController
             if (!$creationForm->validate()) { $entry->addErrors($creationForm->getErrors()); $valid = false; }
         } elseif ($hasCreationRules) { $entry->addError('creation_rules', 'Эта категория не может задавать выдачи при создании.'); $valid = false; }
 
+        $speciesCard = null;
+        if (array_key_exists('species_card', $data)) {
+            try {
+                $speciesCard = (new \app\services\rules\SpeciesCard())->validate($entry, $data['species_card']);
+            } catch (\InvalidArgumentException $error) {
+                $entry->addError('species_card', $error->getMessage());
+                $valid = false;
+            }
+        }
+
+        $classCard = null;
+        if (array_key_exists('class_card', $data)) {
+            try {
+                $classCard = (new \app\services\rules\ClassCard())->validate($entry, $data['class_card']);
+            } catch (\InvalidArgumentException $error) {
+                $entry->addError('class_card', $error->getMessage());
+                $valid = false;
+            }
+        }
+
         $rulebook = null;
         if (array_key_exists('rulebook',$data) || $creating && in_array($entry->type,['subclass','species_variant'],true)) {
             try { $rulebook=(new \app\services\rules\Rulebook())->validate($entry,$data['rulebook']??[]); }
@@ -662,6 +684,8 @@ class CatalogEntryApiController extends ApiController
         if ($creationForm !== null) (new CreationRules())->save($entry, $creationForm->creation_rules);
         if ($mechanics !== null) (new \app\services\rules\EntryMechanics())->save($entry,$mechanics);
         if ($rulebook !== null) (new \app\services\rules\Rulebook())->save($entry,$rulebook);
+        if ($speciesCard !== null) (new \app\services\rules\SpeciesCard())->save($entry->id, $speciesCard);
+        if ($classCard !== null) (new \app\services\rules\ClassCard())->save($entry->id, $classCard);
         return true;
     }
 

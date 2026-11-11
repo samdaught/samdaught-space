@@ -1,3 +1,5 @@
+import { emptySpell, type SpellDefinition } from './spells'
+
 export type EntryMechanics = {
   innate_ability_code: string | null
   unarmored_defense: { base_ac: number; ability_code: string | null; allows_shield: boolean } | null
@@ -9,16 +11,7 @@ export type EntryMechanics = {
     money_cp: number
     items: { item_entry_id: number; quantity: number }[]
   }[]
-  spell: {
-    level: number
-    school: string
-    casting_time: string
-    range_text: string
-    components: string
-    duration: string
-    concentration: boolean
-    ritual: boolean
-  } | null
+  spell: SpellDefinition | null
   spellcasting: {
     enabled: boolean
     ability_code: string | null
@@ -69,19 +62,7 @@ export function mechanicsInput(category: string, data: EntryMechanics): EntryMec
     bonuses: source || category === 'item' ? data.bonuses : [],
     traits: source ? data.traits : [],
     equipment: source ? data.equipment : [],
-    spell:
-      category === 'spell'
-        ? (data.spell ?? {
-            level: 0,
-            school: '',
-            casting_time: '',
-            range_text: '',
-            components: '',
-            duration: '',
-            concentration: false,
-            ritual: false,
-          })
-        : null,
+    spell: category === 'spell' ? (data.spell ?? emptySpell()) : null,
     spellcasting:
       category === 'class'
         ? data.spellcasting?.enabled

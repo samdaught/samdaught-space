@@ -301,6 +301,8 @@ export function rulebookSchema(category: string): Field {
       },
       true,
     )
+  if (category === 'spell')
+    return object('Источники и проверка', { sources: fields.sources!, ready: fields.ready! })
   return object('Правила книги', fields)
 }
 export function initial(field: Field): RuleValue {

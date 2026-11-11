@@ -77,6 +77,17 @@ class ArchiveApiController extends ApiController
             $data['body'] = $row['body'];
             $data['source_url'] = $row['source_url'];
             $data['attribution_text'] = $row['attribution_text'];
+            if ($row['type'] === 'species') {
+                $data['species_card'] = (new \app\services\rules\SpeciesCard())->read((int) $row['id']);
+            }
+            if ($row['type'] === 'class') {
+                $entry = CatalogEntry::findOne((int) $row['id']);
+                $data['class_card'] = (new \app\services\rules\ClassCard())->read((int) $row['id']);
+                $data['class_details'] = $entry === null ? null : (new \app\services\rules\ClassCard())->details($entry);
+            }
+            if ($row['type'] === 'spell') {
+                $data['spell'] = (new \yii\db\Query())->from('{{%spell_definition}}')->where(['catalog_entry_id' => $row['id']])->one() ?: null;
+            }
         }
         return $data;
     }

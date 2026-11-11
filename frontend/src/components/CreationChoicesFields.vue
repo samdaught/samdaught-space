@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CreationBenefits } from '../types/characterEditor'
+import SpellChoiceList from './SpellChoiceList.vue'
+import SpellCardContent from './SpellCardContent.vue'
 const props = withDefaults(
   defineProps<{
     data: CreationBenefits
@@ -65,18 +67,25 @@ function entryTypeTitle(type: string): string {
     <p v-if="group.mode === 'expertise'">
       Для экспертизы нужен навык, которым персонаж уже владеет.
     </p>
-    <label v-for="entry in group.options" :key="entry.id">
-      <input
-        v-model="selections[group.key]"
-        type="checkbox"
-        :value="entry.id"
-        :disabled="
-          group.mode === 'expertise' &&
-          !data.proficient_skill_entry_ids.includes(entry.id) &&
-          !selections[group.key]?.includes(entry.id)
-        "
-      />{{ entry.title }} ({{ entryTypeTitle(entry.type) }})
-    </label>
+    <SpellChoiceList
+      v-if="group.options.length && group.options.every((entry) => entry.type === 'spell')"
+      v-model="selections[group.key]"
+      :entries="group.options"
+    />
+    <template v-else>
+      <label v-for="entry in group.options" :key="entry.id">
+        <input
+          v-model="selections[group.key]"
+          type="checkbox"
+          :value="entry.id"
+          :disabled="
+            group.mode === 'expertise' &&
+            !data.proficient_skill_entry_ids.includes(entry.id) &&
+            !selections[group.key]?.includes(entry.id)
+          "
+        />{{ entry.title }} ({{ entryTypeTitle(entry.type) }})
+      </label>
+    </template>
     <label
       v-for="id in (selections[group.key] ?? []).filter(
         (id) => !group.options.some((entry) => entry.id === id),
@@ -107,15 +116,8 @@ function entryTypeTitle(type: string): string {
   <h3 v-if="entries.length">Полученные особенности и владения</h3>
   <details v-for="entry in entries" :key="entry.id">
     <summary>{{ entry.title }} ({{ entryTypeTitle(entry.type) }})</summary>
-    <p v-if="entry.spell">
-      {{ entry.spell.level === 0 ? 'Заговор' : 'Круг ' + entry.spell.level }} ·
-      {{ entry.spell.school }}<br />Время: {{ entry.spell.casting_time || '—' }} · Дистанция:
-      {{ entry.spell.range_text || '—' }}<br />Компоненты: {{ entry.spell.components || '—' }} ·
-      Длительность: {{ entry.spell.duration || '—'
-      }}<span v-if="entry.spell.concentration"> · Концентрация</span
-      ><span v-if="entry.spell.ritual"> · Ритуал</span>
-    </p>
-    <p>{{ entry.body }}</p>
+    <SpellCardContent v-if="entry.spell" :spell="entry.spell" :body="entry.body ?? ''" />
+    <p v-else>{{ entry.body }}</p>
   </details>
 </template>
 <style scoped>
