@@ -1,11 +1,19 @@
-export type StartingEquipmentInput = {
+export type StructuredStartingEquipmentInput = {
   package_money_cp: number
   alternative_money_cp: number
   include_background_tool: boolean
   items: { item_entry_id: number; quantity: number }[]
 }
 
+export type SourceStartingEquipmentInput = {
+  source_text: string
+}
+
+export type StartingEquipmentInput = StructuredStartingEquipmentInput | SourceStartingEquipmentInput
+
 export type StartingEquipmentDraft = {
+  mode: 'structured' | 'source'
+  source_text: string
   package_money_cp: number
   alternative_money_cp: number
   include_background_tool: boolean
@@ -17,11 +25,16 @@ export function getStartingEquipmentInput(
   maxItems: number,
   maxInteger: number,
 ): StartingEquipmentInput | null {
-  if (draft === null || draft.items.length > maxItems) return null
+  if (draft === null) return null
+  if (draft.mode === 'source') {
+    const sourceText = draft.source_text.trim()
+    return sourceText === '' || sourceText.length > 10000 ? null : { source_text: sourceText }
+  }
+  if (draft.items.length > maxItems) return null
   for (const money of [draft.package_money_cp, draft.alternative_money_cp]) {
     if (!Number.isSafeInteger(money) || money < 0 || money > maxInteger) return null
   }
-  const items: StartingEquipmentInput['items'] = []
+  const items: StructuredStartingEquipmentInput['items'] = []
   for (const item of draft.items) {
     if (
       item.item_entry_id === null ||

@@ -18,8 +18,9 @@ class ItemDefinitionForm extends Model
     public function rules(): array
     {
         return [
+            [['tool_group_code', 'tool_ability_code'], 'filter', 'filter' => static fn($value) => $value === '' ? null : $value],
             ['item_kind_code', 'required', 'message' => 'Выберите вид предмета.'],
-            [['tool_group_code', 'tool_ability_code'], 'required', 'message' => 'Заполните свойства инструмента.',
+            ['tool_group_code', 'required', 'message' => 'Выберите группу инструмента.',
                 'when' => fn(): bool => $this->item_kind_code === ItemKind::TOOL],
             [['item_kind_code', 'tool_group_code'], 'string', 'max' => 32], ['tool_ability_code', 'string', 'max' => 3],
             ['item_kind_code', 'exist', 'targetClass' => ItemKind::class, 'targetAttribute' => ['item_kind_code' => 'code']],

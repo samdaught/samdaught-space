@@ -1,5 +1,5 @@
 import type { BackgroundToolInput } from './itemDefinitions'
-import type { StartingEquipmentInput } from './startingEquipment'
+import type { StructuredStartingEquipmentInput, StartingEquipmentInput } from './startingEquipment'
 
 export type BackgroundAbilityOption = {
   code: string
@@ -25,7 +25,7 @@ export type BackgroundAbilityOptions = {
   tool_configured: boolean
   equipment_item_options: { id: number; title: string }[]
   starting_equipment: StartingEquipmentInput | null
-  starting_equipment_defaults: StartingEquipmentInput
+  starting_equipment_defaults: StructuredStartingEquipmentInput
   equipment_max_items: number
   equipment_integer_max: number
 }

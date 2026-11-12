@@ -23,8 +23,12 @@ export function getItemDefinitionInput(
 ): ItemDefinitionInput | null {
   if (!options.item_kinds.some((kind) => kind.code === draft.item_kind_code)) return null
   if (draft.item_kind_code === options.tool_kind_code) {
-    if (draft.tool_group_code === '' || draft.tool_ability_code === '') return null
-    return { ...draft }
+    if (draft.tool_group_code === '') return null
+    return {
+      item_kind_code: draft.item_kind_code,
+      tool_group_code: draft.tool_group_code,
+      tool_ability_code: draft.tool_ability_code === '' ? null : draft.tool_ability_code,
+    }
   }
   return { item_kind_code: draft.item_kind_code, tool_group_code: null, tool_ability_code: null }
 }

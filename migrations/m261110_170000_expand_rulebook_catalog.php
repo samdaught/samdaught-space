@@ -28,7 +28,6 @@ class m261110_170000_expand_rulebook_catalog extends Migration
             'casting_ability_code' => $this->string(3),
             'casting_choice_code' => $this->string(32),
             'prerequisites' => $this->json()->notNull(),
-            'ready' => $this->boolean()->notNull()->defaultValue(false),
         ]);
         $this->addPrimaryKey('pk_entry_rules', '{{%entry_rules}}', 'entry_id');
         $this->addForeignKey('fk_entry_rules_entry', '{{%entry_rules}}', 'entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
@@ -170,10 +169,6 @@ class m261110_170000_expand_rulebook_catalog extends Migration
             $this->addColumn('{{%armor_definition}}', $column, $type);
         }
         $this->addCheck('ck_armor_strength', '{{%armor_definition}}', '[[strength_min]] BETWEEN 0 AND 30');
-        $this->createTable('{{%entry_source_reference}}', ['entry_id' => $this->integer()->notNull(), 'source_id' => $this->integer()->notNull(), 'page' => $this->string(64)->notNull(), 'url' => $this->string(1000)->notNull(), 'revision' => $this->string(120)->notNull()]);
-        $this->addPrimaryKey('pk_entry_source_reference', '{{%entry_source_reference}}', ['entry_id', 'source_id', 'page']);
-        $this->addForeignKey('fk_source_ref_entry', '{{%entry_source_reference}}', 'entry_id', '{{%catalog_entry}}', 'id', 'RESTRICT', 'RESTRICT');
-        $this->addForeignKey('fk_source_ref_source', '{{%entry_source_reference}}', 'source_id', '{{%content_source}}', 'id', 'RESTRICT', 'RESTRICT');
         foreach (['subclass_entry_id' => 'subclass_definition', 'species_variant_entry_id' => 'species_variant_definition'] as $column => $table) {
             $this->addColumn('{{%character}}', $column, $this->integer());
             $this->addForeignKey('fk_character_' . $column, '{{%character}}', $column, '{{%' . $table . '}}', 'catalog_entry_id', 'RESTRICT', 'RESTRICT');
@@ -209,7 +204,7 @@ class m261110_170000_expand_rulebook_catalog extends Migration
             $this->dropForeignKey('fk_character_' . $column, '{{%character}}');
             $this->dropColumn('{{%character}}', $column);
         }
-        foreach (['entry_source_reference', 'weapon_property', 'weapon_definition', 'entry_item_rule', 'entry_spell_pick_class', 'entry_spell_pick', 'entry_spell_list_class', 'entry_rule_effect', 'entry_rule_distinct_choice', 'entry_rule_choice_value', 'entry_rule_choice', 'entry_spell_grant', 'entry_resource', 'rule_vocabulary', 'class_level_slot', 'class_level_rule', 'entry_level_grant', 'entry_rule_reference', 'entry_rules', 'species_variant_definition', 'subclass_definition'] as $table) {
+        foreach (['weapon_property', 'weapon_definition', 'entry_item_rule', 'entry_spell_pick_class', 'entry_spell_pick', 'entry_spell_list_class', 'entry_rule_effect', 'entry_rule_distinct_choice', 'entry_rule_choice_value', 'entry_rule_choice', 'entry_spell_grant', 'entry_resource', 'rule_vocabulary', 'class_level_slot', 'class_level_rule', 'entry_level_grant', 'entry_rule_reference', 'entry_rules', 'species_variant_definition', 'subclass_definition'] as $table) {
             $this->dropTable('{{%' . $table . '}}');
         }
         foreach (['category', 'strength_min', 'stealth_disadvantage'] as $column) {

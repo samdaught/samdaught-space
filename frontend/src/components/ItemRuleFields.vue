@@ -135,8 +135,6 @@ watch(() => props.itemKind, ensureItem, { immediate: true })
       </div>
       <label v-if="item.magic"><input v-model="item.magic.attunement" type="checkbox" />Требуется настройка</label>
     </section>
-
-    <label class="ready-check"><input v-model="rulebook.ready" type="checkbox" />Игровые свойства предмета заполнены и проверены</label>
   </section>
 </template>
 
@@ -149,6 +147,5 @@ h2, h3 { margin: 0 0 .55rem; }
 .common-grid label { display: grid; gap: .35rem; }
 .choice-list { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-top: 1rem; }
 .choice-list legend { width: 100%; }
-.choice-list label, .ready-check { display: flex; align-items: baseline; gap: .4rem; }
-.ready-check { margin-top: 1.25rem; font-weight: 650; }
+.choice-list label { display: flex; align-items: baseline; gap: .4rem; }
 </style>

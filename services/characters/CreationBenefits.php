@@ -305,11 +305,6 @@ class CreationBenefits
                 $complete = false;
                 continue;
             }
-            if (in_array($type, ['species', 'class'], true) && $rules->read($id) === null && !$book($id)['ready']) {
-                $configured = false;
-                $complete = false;
-                $issues[] = 'Для записи «' . $source->title . '» не настроены выдачи.';
-            }
             $visit($source, 0);
         }
         if ($character->species_entry_id !== null && $book($character->species_entry_id)['variant_required'] && $character->species_variant_entry_id === null) {

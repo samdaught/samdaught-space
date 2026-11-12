@@ -74,7 +74,13 @@ function formatMoney(cp: number): string {
   </template>
   <template v-if="section === 'all' || section === 'equipment'">
     <h3>Стартовое снаряжение</h3>
-    <label>
+    <p v-if="data.equipment.source_text !== null" class="source-equipment">
+      {{ data.equipment.source_text }}
+    </p>
+    <p v-if="data.equipment.source_text !== null">
+      Состав сохранён точно по источнику и пока не преобразован в автоматическую выдачу предметов.
+    </p>
+    <label v-if="data.equipment.source_text === null">
       Вариант от предыстории
       <select v-model="choices.equipment_choice">
         <option :value="null">Пока не выбран</option>
@@ -101,8 +107,8 @@ function formatMoney(cp: number): string {
       </p>
       <p v-if="!data.equipment.package_available">Комплект сейчас недоступен.</p>
     </details>
-    <p v-if="previewStale">Сохраните черновик, чтобы обновить результат выдач предыстории.</p>
-    <template v-else-if="data.equipment.preview">
+    <p v-if="data.equipment.source_text === null && previewStale">Сохраните черновик, чтобы обновить результат выдач предыстории.</p>
+    <template v-else-if="data.equipment.source_text === null && data.equipment.preview">
       <h4>Снаряжение от предыстории по сохранённым данным</h4>
       <ul>
         <li v-for="item in data.equipment.preview.items" :key="item.id">

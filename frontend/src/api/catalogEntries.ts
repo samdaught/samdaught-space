@@ -262,7 +262,9 @@ export async function copyCatalogEntryToWorld(
     } | null
 
     throw new Error(
-      result?.error?.message ?? result?.message ?? 'Не удалось скопировать запись. HTTP ' + response.status,
+      result?.error?.message ??
+        result?.message ??
+        'Не удалось скопировать запись. HTTP ' + response.status,
     )
   }
 
@@ -272,7 +274,6 @@ export async function copyCatalogEntryToWorld(
 }
 
 export type CatalogEntryListItem = {
-  mechanics_status?: 'ready' | 'partial' | 'text'
   id: number
   title: string
   type: string
@@ -287,10 +288,26 @@ export type CatalogEntriesResponse = {
   meta: PaginationMeta
 }
 
-export async function getCatalogEntries(page: number = 1): Promise<CatalogEntriesResponse> {
+export type CatalogEntriesQuery = {
+  page?: number
+  q?: string
+  sort?: 'title' | 'type' | 'profile' | 'status'
+  direction?: 'asc' | 'desc'
+}
+
+export async function getCatalogEntries({
+  page = 1,
+  q = '',
+  sort = 'title',
+  direction = 'asc',
+}: CatalogEntriesQuery = {}): Promise<CatalogEntriesResponse> {
   const params = new URLSearchParams({
     page: String(page),
+    sort,
+    direction,
   })
+
+  if (q.trim() !== '') params.set('q', q.trim())
 
   const response = await fetch('/api/v1/catalog-entries?' + params.toString(), {
     credentials: 'same-origin',

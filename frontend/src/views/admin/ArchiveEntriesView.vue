@@ -1,19 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   copyCatalogEntryToWorld,
   getCatalogEntries,
   type CatalogEntriesResponse,
+  type CatalogEntriesQuery,
   setCatalogEntryPublished,
   type CatalogEntryListItem,
 } from '../../api/catalogEntries'
 import { getRuleProfiles, type RuleProfile } from '../../api/ruleProfiles'
 
+type AuditRow = {
+  id: number
+  title: string
+  complete: boolean
+  issues: string[]
+  content_complete: boolean
+  content_issues: string[]
+  warnings: string[]
+}
+type SortField = NonNullable<CatalogEntriesQuery['sort']>
+type SortDirection = NonNullable<CatalogEntriesQuery['direction']>
+
 const router = useRouter()
-const audit = ref<{ id: number; title: string; complete: boolean; issues: string[] }[] | null>(
-  null,
-)
+const audit = ref<AuditRow[] | null>(null)
 const auditing = ref(false)
 const entriesPage = ref<CatalogEntriesResponse | null>(null)
 const profiles = ref<RuleProfile[]>([])
@@ -24,6 +35,19 @@ const publishingId = ref<number | null>(null)
 const copyingId = ref<number | null>(null)
 const copyingEntry = ref<CatalogEntryListItem | null>(null)
 const copyTargetId = ref<number | null>(null)
+const search = ref('')
+const sort = ref<SortField>('title')
+const direction = ref<SortDirection>('asc')
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let latestListRequest = 0
+
+const incompleteAudit = computed(() => audit.value?.filter((row) => !row.complete) ?? [])
+const incompleteContentAudit = computed(
+  () => audit.value?.filter((row) => !row.content_complete) ?? [],
+)
+const draftDependencyAudit = computed(
+  () => audit.value?.filter((row) => row.warnings.length > 0) ?? [],
+)
 
 const copyTargets = computed(() =>
   profiles.value.filter((profile) => profile.id !== copyingEntry.value?.rule_profile_id),
@@ -49,18 +73,58 @@ async function auditArchive() {
 }
 
 async function loadPage(page: number = 1) {
-  if (loading.value || publishingId.value !== null) return
+  if (publishingId.value !== null) return
 
+  const requestId = ++latestListRequest
   loading.value = true
   error.value = ''
 
   try {
-    entriesPage.value = await getCatalogEntries(page)
+    const result = await getCatalogEntries({
+      page,
+      q: search.value,
+      sort: sort.value,
+      direction: direction.value,
+    })
+    if (requestId === latestListRequest) entriesPage.value = result
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'Не удалось загрузить записи'
+    if (requestId === latestListRequest) {
+      error.value = cause instanceof Error ? cause.message : 'Не удалось загрузить записи'
+    }
   } finally {
-    loading.value = false
+    if (requestId === latestListRequest) loading.value = false
   }
+}
+
+function sortLabel(column: SortField): string {
+  if (sort.value !== column) return ''
+  return direction.value === 'asc' ? 'по возрастанию' : 'по убыванию'
+}
+
+async function changeSort(column: SortField) {
+  if (sort.value === column) {
+    direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sort.value = column
+    direction.value = 'asc'
+  }
+  await loadPage()
+}
+
+function scheduleSearch() {
+  if (searchTimer !== null) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    searchTimer = null
+    void loadPage()
+  }, 250)
+}
+
+function clearSearch() {
+  if (search.value === '') return
+  search.value = ''
+  if (searchTimer !== null) clearTimeout(searchTimer)
+  searchTimer = null
+  void loadPage()
 }
 
 async function loadProfiles() {
@@ -143,6 +207,10 @@ async function copyToWorld() {
   }
 }
 
+onBeforeUnmount(() => {
+  if (searchTimer !== null) clearTimeout(searchTimer)
+})
+
 onMounted(async () => {
   await Promise.all([loadPage(), loadProfiles()])
 })
@@ -157,31 +225,63 @@ onMounted(async () => {
     </RouterLink>
   </header>
 
+  <section class="archive-tools" aria-label="Поиск и сортировка записей">
+    <label class="archive-search">
+      Найти запись
+      <input
+        v-model="search"
+        type="search"
+        maxlength="100"
+        placeholder="Название, категория, мир или код"
+        @input="scheduleSearch"
+      />
+    </label>
+    <button v-if="search" type="button" :disabled="loading" @click="clearSearch">
+      Очистить поиск
+    </button>
+    <p class="field-hint">Нажмите на заголовок столбца, чтобы изменить порядок сортировки.</p>
+  </section>
+
   <button type="button" :disabled="auditing" @click="auditArchive">
     {{ auditing ? 'Проверяем…' : 'Проверить готовность архива' }}
   </button>
 
-  <section v-if="audit">
+  <section v-if="audit" class="audit-results">
     <h3>Проверка механики</h3>
     <p>
-      Проверено: {{ audit.length }}. Требуют заполнения:
-      {{ audit.filter((row) => !row.complete).length }}.
+      Проверено: {{ audit.length }}. Требуют настройки механики: {{ incompleteAudit.length }}.
+      Требуют описания для публикации: {{ incompleteContentAudit.length }}. Связи с черновиками:
+      {{ draftDependencyAudit.length }}.
     </p>
-    <details v-for="row in audit.filter((row) => !row.complete)" :key="row.id">
+    <p class="field-hint">
+      Черновик в связанной записи не означает ошибку механики: он лишь не опубликован. Такие связи
+      показаны отдельно, чтобы не смешивать их с тем, что действительно нужно заполнить.
+    </p>
+    <details v-for="row in incompleteAudit" :key="row.id">
       <summary>{{ row.title }}</summary>
       <ul>
         <li v-for="issue in row.issues" :key="issue">{{ issue }}</li>
       </ul>
       <RouterLink :to="'/admin/archive/entries/' + row.id + '/edit'">Исправить запись</RouterLink>
     </details>
+    <details v-if="incompleteContentAudit.length > 0" class="content-audit">
+      <summary>Записи без описания для публикации: {{ incompleteContentAudit.length }}</summary>
+      <ul>
+        <li v-for="row in incompleteContentAudit" :key="row.id">
+          <RouterLink :to="'/admin/archive/entries/' + row.id + '/edit'">{{
+            row.title
+          }}</RouterLink>
+        </li>
+      </ul>
+    </details>
   </section>
 
   <section v-if="copyingEntry" class="copy-panel" aria-labelledby="copy-entry-title">
     <h3 id="copy-entry-title">Перенести запись в другой мир</h3>
     <p>
-      Будет создан неопубликованный черновик «{{ copyingEntry.title }}». Связи с записями
-      исходного мира не переносятся: в новом мире мастер настраивает их заново. У классов также
-      заново задаются выборы навыков.
+      Будет создан неопубликованный черновик «{{ copyingEntry.title }}». Связи с записями исходного
+      мира не переносятся: в новом мире мастер настраивает их заново. У классов также заново
+      задаются выборы навыков.
     </p>
     <label>
       Целевой мир
@@ -214,11 +314,58 @@ onMounted(async () => {
       <table>
         <thead>
           <tr>
-            <th scope="col">Название</th>
-            <th scope="col">Категория</th>
-            <th scope="col">Мир</th>
-            <th scope="col">Статус</th>
-            <th scope="col">Механика</th>
+            <th scope="col">
+              <button
+                class="sort-button"
+                type="button"
+                :aria-label="`Сортировать по названию: ${sortLabel('title') || 'не выбрано'}`"
+                @click="changeSort('title')"
+              >
+                Название
+                <span v-if="sort === 'title'" aria-hidden="true">{{
+                  direction === 'asc' ? '↑' : '↓'
+                }}</span>
+              </button>
+            </th>
+            <th scope="col">
+              <button
+                class="sort-button"
+                type="button"
+                :aria-label="`Сортировать по категории: ${sortLabel('type') || 'не выбрано'}`"
+                @click="changeSort('type')"
+              >
+                Категория
+                <span v-if="sort === 'type'" aria-hidden="true">{{
+                  direction === 'asc' ? '↑' : '↓'
+                }}</span>
+              </button>
+            </th>
+            <th scope="col">
+              <button
+                class="sort-button"
+                type="button"
+                :aria-label="`Сортировать по миру: ${sortLabel('profile') || 'не выбрано'}`"
+                @click="changeSort('profile')"
+              >
+                Мир
+                <span v-if="sort === 'profile'" aria-hidden="true">{{
+                  direction === 'asc' ? '↑' : '↓'
+                }}</span>
+              </button>
+            </th>
+            <th scope="col">
+              <button
+                class="sort-button"
+                type="button"
+                :aria-label="`Сортировать по статусу: ${sortLabel('status') || 'не выбрано'}`"
+                @click="changeSort('status')"
+              >
+                Статус
+                <span v-if="sort === 'status'" aria-hidden="true">{{
+                  direction === 'asc' ? '↑' : '↓'
+                }}</span>
+              </button>
+            </th>
             <th scope="col">Действия</th>
           </tr>
         </thead>
@@ -229,15 +376,6 @@ onMounted(async () => {
             <td>{{ entry.type_title }}</td>
             <td>{{ entry.rule_profile_title }}</td>
             <td>{{ entry.is_published ? 'Опубликовано' : 'Черновик' }}</td>
-            <td>
-              {{
-                entry.mechanics_status === 'ready'
-                  ? 'Заполнена'
-                  : entry.mechanics_status === 'partial'
-                    ? 'Частично'
-                    : 'Только текст'
-              }}
-            </td>
             <td class="entry-actions">
               <RouterLink :to="'/admin/archive/entries/' + entry.id + '/edit'">
                 Редактировать
@@ -259,9 +397,7 @@ onMounted(async () => {
               >
                 В другой мир
               </button>
-              <span v-else class="copy-unavailable">
-                Сначала перенесите основу
-              </span>
+              <span v-else class="copy-unavailable"> Сначала перенесите основу </span>
 
               <span v-if="publishingId === entry.id" role="status">Меняем статус…</span>
             </td>
@@ -274,7 +410,9 @@ onMounted(async () => {
     <nav aria-label="Страницы записей архива">
       <button
         type="button"
-        :disabled="loading || publishingId !== null || copyingId !== null || entriesPage.meta.page <= 1"
+        :disabled="
+          loading || publishingId !== null || copyingId !== null || entriesPage.meta.page <= 1
+        "
         @click="changePage(-1)"
       >
         Назад
@@ -301,6 +439,57 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.archive-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem 1rem;
+  margin: 1.25rem 0;
+}
+
+.archive-search {
+  display: grid;
+  gap: 0.35rem;
+  width: min(100%, 30rem);
+}
+
+.field-hint {
+  width: 100%;
+  margin: 0;
+  color: var(--muted);
+}
+
+.audit-results {
+  margin: 1.25rem 0;
+}
+
+.audit-results details {
+  margin-block: 0.5rem;
+}
+
+.content-audit ul {
+  max-height: 18rem;
+  overflow: auto;
+}
+
+.sort-button {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: baseline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.sort-button:hover {
+  color: var(--accent);
+}
+
 .copy-panel {
   display: grid;
   gap: 0.85rem;

@@ -22,13 +22,24 @@ class BackgroundStartingEquipmentWriter
                 $rule = new BackgroundStartingEquipment();
                 $rule->background_entry_id = $background->id;
             }
-            foreach (['package_money_cp', 'alternative_money_cp', 'include_background_tool'] as $field) {
-                $rule->$field = $value[$field];
+            if (array_key_exists('source_text', $value)) {
+                $rule->source_text = trim($value['source_text']);
+                $rule->package_money_cp = null;
+                $rule->alternative_money_cp = null;
+                $rule->include_background_tool = null;
+            } else {
+                $rule->source_text = null;
+                foreach (['package_money_cp', 'alternative_money_cp', 'include_background_tool'] as $field) {
+                    $rule->$field = $value[$field];
+                }
             }
             if (!$rule->save()) {
                 throw new \RuntimeException('Не удалось сохранить варианты стартового снаряжения.');
             }
             BackgroundStartingEquipmentItem::deleteAll(['background_entry_id' => $background->id]);
+            if (array_key_exists('source_text', $value)) {
+                return;
+            }
             foreach ($value['items'] as $line) {
                 $item = new BackgroundStartingEquipmentItem();
                 $item->background_entry_id = $background->id;

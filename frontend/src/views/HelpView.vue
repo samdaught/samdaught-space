@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { publicAsset } from '../utils/publicAsset'
+import { publicAsset } from "../utils/publicAsset";
 
-const contact = import.meta.env.VITE_ADMIN_CONTACT_URL ?? ''
-const safeContact = /^(https:\/\/|mailto:)/.test(contact) ? contact : ''
+const contact = import.meta.env.VITE_ADMIN_CONTACT_URL ?? "";
+const safeContact = /^(https:\/\/|mailto:)/.test(contact) ? contact : "";
 </script>
 <template>
   <article class="reading-page">
@@ -55,7 +55,7 @@ const safeContact = /^(https:\/\/|mailto:)/.test(contact) ? contact : ''
       <a :href="safeContact" rel="noopener noreferrer">Написать администратору</a>
     </p>
     <p v-else>
-      Напишите администратору в вашем игровом чате. Для ошибки укажите страницу, действие и текст
+      Напишите администратору в телеграмм @samdaught. Для ошибки укажите страницу, действие и текст
       сообщения; пароль и cookie присылать не нужно.
     </p>
     <p>

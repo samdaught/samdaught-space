@@ -220,7 +220,21 @@ function applyAbilityOptions(options: BackgroundAbilityOptions): void {
       ? { tool_entry_id: null, tool_group_code: null }
       : { ...options.background_tool }
   const equipment = options.starting_equipment ?? options.starting_equipment_defaults
-  startingEquipment.value = { ...equipment, items: equipment.items.map((item) => ({ ...item })) }
+  if ('source_text' in equipment) {
+    startingEquipment.value = {
+      mode: 'source',
+      source_text: equipment.source_text,
+      ...options.starting_equipment_defaults,
+      items: [],
+    }
+  } else {
+    startingEquipment.value = {
+      mode: 'structured',
+      source_text: '',
+      ...equipment,
+      items: equipment.items.map((item) => ({ ...item })),
+    }
+  }
 }
 
 async function loadAbilityOptions(id: number): Promise<void> {
@@ -609,17 +623,12 @@ async function submit() {
           {{ rulebook.error.value }}
           <button type="button" @click="rulebook.load()">Повторить</button>
         </p>
-        <section v-if="!['species', 'class', 'spell', 'item'].includes(entry.type) && rulebook.options.value" class="rules-check">
-          <h2>Проверка правил</h2>
-          <p>Описание и указанные выше выдачи — единственные правила этой записи. Отметьте после проверки.</p>
-          <label><input v-model="rulebook.fields.value.ready" type="checkbox" />Правила записи заполнены и проверены</label>
-        </section>
         <p v-if="mechanics.error.value" role="alert">
           {{ mechanics.error.value }}
           <button type="button" @click="mechanics.load()">Повторить загрузку механики</button>
         </p>
         <ItemRuleFields
-          v-if="entry.type === 'item' && mechanics.options.value && rulebook.ready.value"
+          v-if="entry.type === 'item' && mechanics.options.value"
           v-model:mechanics="mechanics.fields.value"
           v-model:rulebook="rulebook.fields.value"
           :item-kind="itemFields.item_kind_code"
@@ -638,11 +647,7 @@ async function submit() {
           :title="form.title"
           :published="entry.is_published"
           :options="mechanics.options.value"
-        >
-          <template #advanced>
-            <label><input v-model="rulebook.fields.value.ready" type="checkbox" />Правила доступности заклинания заполнены и проверены</label>
-          </template>
-        </SpellEditorFields>
+        />
         <SpeciesEditorFields
           v-if="
             entry.type === 'species' &&
@@ -651,7 +656,6 @@ async function submit() {
             creation.options.value &&
             mechanics.ready.value &&
             mechanics.options.value &&
-            rulebook.ready.value &&
             rulebook.options.value
           "
           v-model="speciesCard"
@@ -675,7 +679,6 @@ async function submit() {
             creation.options.value &&
             mechanics.ready.value &&
             mechanics.options.value &&
-            rulebook.ready.value &&
             rulebook.options.value
           "
           v-model="classCard"

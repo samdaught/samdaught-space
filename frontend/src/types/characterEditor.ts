@@ -68,6 +68,7 @@ export type CharacterBackgroundBenefits = {
   }
   equipment: {
     configured: boolean
+    source_text: string | null
     choice: BackgroundBenefitsDraft['equipment_choice']
     package_available: boolean
     money_available: boolean

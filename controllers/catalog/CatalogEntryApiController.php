@@ -100,24 +100,23 @@ class CatalogEntryApiController extends ApiController
 
     public function actionIndex(): array
     {
-        $pageInput = Yii::$app->request->get('page', '1');
-        $perPageInput = Yii::$app->request->get('per_page', '20');
-        $page = filter_var(
-            $pageInput,
-            FILTER_VALIDATE_INT,
-            ['options' => ['min_range' => 1]]
-        );
+        $page = $this->positiveIntegerParameter('page', 1, 1000000);
+        $perPage = $this->positiveIntegerParameter('per_page', 20, 100);
+        $search = $this->stringParameter('q', 100);
+        $sort = $this->stringParameter('sort', 32) ?: 'title';
+        $direction = $this->stringParameter('direction', 4) ?: 'asc';
 
-        $perPage = filter_var(
-            $perPageInput,
-            FILTER_VALIDATE_INT,
-            ['options' => ['min_range' => 1, 'max_range' => 100]]
-        );
-
-        if ($page === false || $perPage === false) {
-            throw new \yii\web\BadRequestHttpException(
-                'page должен быть целым числом от 1, per_page — от 1 до 100.'
-            );
+        $sorts = [
+            'title' => 'entry.title',
+            'type' => 'category.title',
+            'profile' => 'profile.title',
+            'status' => 'entry.is_published',
+        ];
+        if (!isset($sorts[$sort])) {
+            throw new \yii\web\BadRequestHttpException('Неизвестное поле сортировки.');
+        }
+        if (!in_array($direction, ['asc', 'desc'], true)) {
+            throw new \yii\web\BadRequestHttpException('Направление сортировки должно быть asc или desc.');
         }
 
         $query = CatalogEntry::find()
@@ -126,11 +125,9 @@ class CatalogEntryApiController extends ApiController
                 ['category' => CatalogEntryType::tableName()],
                 '[[category.code]] = [[entry.type]]'
             )
-            ->leftJoin(['rules'=>'{{%entry_rules}}'],'[[rules.entry_id]]=[[entry.id]]')
             ->innerJoin(['profile' => RuleProfile::tableName()], '[[profile.id]] = [[entry.rule_profile_id]]')
             ->select([
                 'entry.id',
-                'mechanics_status'=>new \yii\db\Expression("CASE WHEN [[rules.ready]] THEN 'ready' WHEN [[rules.entry_id]] IS NOT NULL THEN 'partial' ELSE 'text' END"),
                 'entry.type',
                 'entry.slug',
                 'entry.title',
@@ -142,20 +139,29 @@ class CatalogEntryApiController extends ApiController
                 'type_title' => 'category.title',
             ]);
 
+        if ($search !== '') {
+            $query->andWhere([
+                'or',
+                ['ilike', 'entry.title', $search],
+                ['ilike', 'entry.slug', $search],
+                ['ilike', 'category.title', $search],
+                ['ilike', 'profile.title', $search],
+            ]);
+        }
+
         $total = (int) (clone $query)->count();
-
         $pageCount = max(1, (int) ceil($total / $perPage));
-
         if ($page > $pageCount) {
             throw new \yii\web\NotFoundHttpException('Страница списка не найдена.');
         }
 
-        $offset = ($page - 1) * $perPage;
-
         $entries = $query
-            ->orderBy(['entry.id' => SORT_DESC])
+            ->orderBy([
+                $sorts[$sort] => $direction === 'asc' ? SORT_ASC : SORT_DESC,
+                'entry.id' => SORT_ASC,
+            ])
             ->limit($perPage)
-            ->offset($offset)
+            ->offset(($page - 1) * $perPage)
             ->asArray()
             ->all();
 
@@ -172,8 +178,13 @@ class CatalogEntryApiController extends ApiController
 
     public function actionAudit(): array
     {
-        $report=[];foreach(CatalogEntry::find()->orderBy('id')->each() as $entry)$report[]=(new \app\services\rules\ArchiveReadiness())->inspect($entry);
-        return ['data'=>$report];
+        $readiness = new \app\services\rules\ArchiveReadiness();
+        $report = [];
+        foreach (CatalogEntry::find()->orderBy('id')->each() as $entry) {
+            $report[] = $readiness->inspect($entry);
+        }
+
+        return ['data' => $report];
     }
 
     public function actionView(int $id): array
@@ -378,6 +389,28 @@ class CatalogEntryApiController extends ApiController
         return ['data'=>(new \app\services\rules\Rulebook())->options($profile)];
     }
 
+    private function positiveIntegerParameter(string $name, int $default, int $maximum): int
+    {
+        $value = Yii::$app->request->get($name, (string) $default);
+        if (!is_scalar($value)) {
+            throw new \yii\web\BadRequestHttpException('Некорректный параметр ' . $name . '.');
+        }
+        $number = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => $maximum]]);
+        if ($number === false) {
+            throw new \yii\web\BadRequestHttpException('Параметр ' . $name . ' должен быть целым числом от 1 до ' . $maximum . '.');
+        }
+        return $number;
+    }
+
+    private function stringParameter(string $name, int $maximum): string
+    {
+        $value = Yii::$app->request->get($name, '');
+        if (!is_string($value) || mb_strlen($value) > $maximum) {
+            throw new \yii\web\BadRequestHttpException('Некорректный параметр ' . $name . '.');
+        }
+        return trim($value);
+    }
+
     private function getEntryData(CatalogEntry $entry): array
     {
         $data = $entry->getAttributes([
@@ -467,7 +500,6 @@ class CatalogEntryApiController extends ApiController
             $rules['spell_grants'] = [];
             $rules['spell_picks'] = [];
             $rules['resources'] = [];
-            $rules['ready'] = false;
             if (isset($rules['item']) && is_array($rules['item'])) {
                 $rules['item']['magic'] = null;
             }
@@ -782,6 +814,18 @@ class CatalogEntryApiController extends ApiController
 
         if ($entry === null) {
             throw new \yii\web\NotFoundHttpException('Запись не найдена');
+        }
+
+        $readiness = (new \app\services\rules\ArchiveReadiness())->inspect($entry);
+        if (!$readiness['complete'] || !$readiness['content_complete']) {
+            Yii::$app->response->setStatusCode(422);
+            return [
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'Запись нельзя опубликовать, пока не завершена проверка готовности.',
+                    'fields' => ['archive' => array_merge($readiness['issues'], $readiness['content_issues'])],
+                ],
+            ];
         }
 
         $entry->is_published = true;

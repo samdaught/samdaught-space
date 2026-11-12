@@ -13,6 +13,21 @@ class CharacterStartingEquipmentPreview
 
     public function get(?array $definition, ?array $tool, ?string $choice, bool $toolConfigured, RuleProfile $profile): array
     {
+        if ($definition !== null && array_key_exists('source_text', $definition)) {
+            return [
+                'configured' => true,
+                'source_text' => $definition['source_text'],
+                'choice' => null,
+                'package_available' => false,
+                'money_available' => false,
+                'package' => null,
+                'alternative_money_cp' => null,
+                'preview' => null,
+                'complete' => false,
+                'issues' => ['Стартовое снаряжение сохранено точным текстом источника и пока не нормализовано для выдачи персонажу.'],
+            ];
+        }
+
         $issues = [];
         $packageAvailable = false;
         $items = [];
@@ -60,6 +75,7 @@ class CharacterStartingEquipmentPreview
 
         return [
             'configured' => $definition !== null,
+            'source_text' => null,
             'choice' => $choice,
             'package_available' => $packageAvailable,
             'money_available' => $definition !== null,

@@ -22,8 +22,21 @@ class BackgroundStartingEquipmentForm extends Model
     public function validateEquipment($attribute, $params): void
     {
         $value = $this->$attribute;
+        if (!is_array($value)) {
+            $this->addError($attribute, 'Передайте точный текст комплекта из источника или структурированный комплект.');
+            return;
+        }
+
+        if (count($value) === 1 && array_key_exists('source_text', $value)) {
+            $sourceText = $value['source_text'];
+            if (!is_string($sourceText) || trim($sourceText) === '' || mb_strlen($sourceText) > 10000) {
+                $this->addError($attribute, 'Точный текст комплекта должен быть непустой строкой до 10 000 символов.');
+            }
+            return;
+        }
+
         $keys = ['package_money_cp', 'alternative_money_cp', 'include_background_tool', 'items'];
-        if (!is_array($value) || count($value) !== count($keys) || array_diff($keys, array_keys($value))) {
+        if (count($value) !== count($keys) || array_diff($keys, array_keys($value))) {
             $this->addError($attribute, 'Заполните комплект и денежную альтернативу стартового снаряжения.');
             return;
         }

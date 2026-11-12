@@ -28,8 +28,8 @@ const fields = defineModel<ItemDefinitionDraft>({ required: true })
     </label>
     <label v-if="fields.item_kind_code === options.tool_kind_code">
       Характеристика по умолчанию
-      <select v-model="fields.tool_ability_code" required>
-        <option disabled value="">Выберите характеристику</option>
+      <select v-model="fields.tool_ability_code">
+        <option value="">Не задана: зависит от конкретной проверки</option>
         <option
           v-for="ability in options.ability_options"
           :key="ability.code"
@@ -39,6 +39,10 @@ const fields = defineModel<ItemDefinitionDraft>({ required: true })
         </option>
       </select>
     </label>
+    <p v-if="fields.item_kind_code === options.tool_kind_code" class="field-hint">
+      У инструмента нет обязательной единственной характеристики. Указывайте значение только если мир
+      явно установил его как удобный вариант по умолчанию.
+    </p>
     <p v-if="['weapon', 'armor', 'shield'].includes(fields.item_kind_code)">
       После выбора вида заполните ниже боевые свойства: урон или КД, вес, стоимость и при необходимости
       магические свойства.
@@ -54,5 +58,10 @@ fieldset,
 label {
   display: grid;
   gap: 0.5rem;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--muted);
 }
 </style>

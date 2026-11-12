@@ -45,7 +45,6 @@ try {
     $mechanics['spell'] = $definition;
     $mechanics['class_ids'] = [$class->id];
     $book = Rulebook::empty();
-    $book['ready'] = true;
     checkSpell($save->invoke($controller, $spell, ['mechanics' => $mechanics, 'rulebook' => $book], true), 'Spell create failed: ' . json_encode($spell->getErrors(), JSON_UNESCAPED_UNICODE));
     $loaded = $controller->actionView($spell->id)['data'];
     checkSpell($loaded['mechanics']['spell'] == $definition, 'Spell fields must survive save/reload.');
@@ -53,7 +52,7 @@ try {
     $loaded['mechanics']['spell']['duration'] = 'До 1 минуты';
     $loaded['mechanics']['spell']['concentration'] = true;
     checkSpell($save->invoke($controller, $spell, ['mechanics' => $loaded['mechanics']], false), 'Spell edit failed.');
-    checkSpell($controller->actionView($spell->id)['data']['rulebook']['ready'], 'Editing a card must preserve hidden rule settings.');
+    checkSpell(!array_key_exists('ready', $controller->actionView($spell->id)['data']['rulebook']), 'Rulebook must not expose a manual readiness flag.');
     $spell->is_published = true;
     checkSpell($spell->save(), 'Spell publication failed.');
     $public = (new ArchiveApiController('archive-check', Yii::$app))->actionView($spell->id)['data'];
@@ -76,7 +75,7 @@ try {
     $invalid['spell']['level'] = 10;
     checkSpell(!$save->invoke($controller, $spell, ['mechanics' => $invalid], false), 'Invalid spell levels must be rejected.');
     checkSpell($controller->actionView($spell->id)['data']['mechanics']['spell']['level'] === 1, 'Invalid edits must preserve saved parameters.');
-    echo "PASS: spell create/edit/reload, class links, hidden settings, public card, details before selection, selected spell, invalid input.\n";
+    echo "PASS: spell create/edit/reload, class links, public card, details before selection, selected spell, invalid input.\n";
 } finally {
     $transaction->rollBack();
 }

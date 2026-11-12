@@ -82,15 +82,9 @@ function addChoice(): void {
     </button>
     <fieldset v-for="(choice, index) in fields.choices" :key="index">
       <legend>Группа выбора {{ index + 1 }}</legend>
-      <label
-        >Постоянный код<input
-          v-model="choice.code"
-          pattern="[a-z][a-z0-9_]{0,31}"
-          maxlength="32"
-          required
-      /></label>
-      <p>
-        Код связывает личные выборы с правилом. При изменении смысла группы используйте новый код.
+      <p class="field-hint">
+        Система создаёт внутренний идентификатор выбора сама. Не меняйте название, если смысл уже
+        выбранного игроком варианта должен остаться тем же.
       </p>
       <label>Название для игрока<input v-model="choice.title" maxlength="120" required /></label>
       <label

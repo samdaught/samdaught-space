@@ -333,7 +333,6 @@ function addChoice(type: string, title: string): void {
       </p>
       <EntryMechanicsFields v-model="mechanics" category="species" :options="mechanicsOptions" />
       <CreationRuleFields v-model="creation" :options="creationOptions" />
-      <label class="rules-ready"><input v-model="rulebook.ready" type="checkbox" />Автоматические правила вида заполнены и проверены</label>
     </section>
   </section>
 </template>
@@ -439,13 +438,6 @@ function addChoice(type: string, title: string): void {
   display: grid;
   gap: 0.8rem;
   margin-top: 1rem;
-}
-.rules-ready {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  margin-top: 1rem;
-  font-weight: 650;
 }
 @media (max-width: 600px) {
   .species-field-row {

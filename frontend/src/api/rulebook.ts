@@ -11,7 +11,6 @@ export type RulebookData = Record<string, RuleValue>
 export type RulebookOptions = {
   entries: { id: number; type: string; title: string; is_published: boolean }[]
   vocabulary: { kind: string; code: string; title: string; group_code: string }[]
-  sources: { id: number; title: string }[]
   targets: string[]
   recovery: string[]
   features: string[]
@@ -38,8 +37,6 @@ export function emptyRulebook(): RulebookData {
     spell_picks: [],
     resources: [],
     item: null,
-    sources: [],
-    ready: false,
   }
 }
 

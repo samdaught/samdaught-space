@@ -26,6 +26,7 @@ ENV YII_ENV=prod \
     PHP_USER_ID=0
 
 COPY assets/ ./assets/
+COPY CVS/ ./CVS/
 COPY commands/ ./commands/
 COPY config/ ./config/
 COPY controllers/ ./controllers/

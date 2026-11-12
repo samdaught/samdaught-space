@@ -15,6 +15,9 @@ class BackgroundStartingEquipmentReader
         if ($rule === null) {
             return null;
         }
+        if ($rule->source_text !== null) {
+            return ['source_text' => $rule->source_text];
+        }
         return [
             'package_money_cp' => $rule->package_money_cp,
             'alternative_money_cp' => $rule->alternative_money_cp,

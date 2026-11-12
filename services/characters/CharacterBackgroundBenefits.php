@@ -138,7 +138,7 @@ class CharacterBackgroundBenefits
 
     private function emptyEquipment(): array
     {
-        return ['configured' => false, 'choice' => null, 'package_available' => false, 'money_available' => false,
+        return ['configured' => false, 'source_text' => null, 'choice' => null, 'package_available' => false, 'money_available' => false,
             'package' => null, 'alternative_money_cp' => null, 'preview' => null, 'complete' => false, 'issues' => []];
     }
 }

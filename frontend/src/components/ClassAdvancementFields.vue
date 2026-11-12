@@ -75,8 +75,11 @@ function addGrant(): void {
   grants.value.push({ entry_id: 0, level: 1, level_basis: 'class' })
 }
 function addResource(): void {
+  let number = 1
+  while (resources.value.some((resource) => resource.code === `resource_${number}`)) number++
+
   resources.value.push({
-    code: 'resource_' + (resources.value.length + 1),
+    code: `resource_${number}`,
     title: '',
     maximum: {
       base: 0,
@@ -217,7 +220,6 @@ function setResourceMode(resource: Resource, mode: 'class_level' | 'fixed'): voi
       <button type="button" @click="addResource">Добавить счётчик</button>
     </section>
 
-    <label class="ready-check"><input v-model="model.ready" type="checkbox" />Правила развития этого класса заполнены и проверены</label>
   </section>
 </template>
 
@@ -236,5 +238,4 @@ td input, td select { min-width: 4.25rem; width: 100%; }
 .inline-row label, .resource-row label { display: grid; gap: .35rem; min-width: 10rem; }
 .spell-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .5rem 1rem; max-height: 19rem; overflow: auto; padding: .75rem; border: 1px solid var(--line); border-radius: 8px; }
 .spell-list label { display: flex; align-items: baseline; gap: .4rem; }
-.ready-check { display: flex; gap: .5rem; align-items: center; margin-top: 1.25rem; font-weight: 650; }
 </style>

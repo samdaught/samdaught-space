@@ -10,6 +10,7 @@ final class ArchiveReadiness
     public function inspect(CatalogEntry $entry): array
     {
         $issues = [];
+        $warnings = [];
         $service = new Rulebook();
         $data = $service->read($entry->id);
         try {
@@ -21,19 +22,19 @@ final class ArchiveReadiness
         if ($definition && !(new Query())->from('{{%' . $definition . '}}')->where(['catalog_entry_id' => $entry->id])->exists()) {
             $issues[] = 'Не заполнено определение категории.';
         }
-        if (!$data['ready']) {
-            $issues[] = 'Запись не отмечена как механически заполненная.';
-        }
         if ($entry->type === 'class' && count($data['progression']) !== 20) {
             $issues[] = 'Не заполнена прогрессия всех 20 уровней.';
         }
-        if (in_array($entry->type, ['class', 'species'], true) && !(new CreationRules())->read($entry->id)) {
-            $issues[] = 'Не настроены выдачи и группы выбора.';
+        if ($entry->type === 'species' && !(new CreationRules())->read($entry->id)) {
+            $issues[] = 'Не настроены выдачи и группы выбора вида.';
         }
         if ($entry->type === 'item') {
             $kind = (new Query())->select('kind_code')->from('{{%item_definition}}')->where(['catalog_entry_id' => $entry->id])->scalar();
-            if ($data['item'] === null) {
+            if ($data['item'] === null && $kind !== 'tool') {
                 $issues[] = 'Не заполнены стоимость и вес предмета.';
+            }
+            if ($kind === 'tool' && !(new Query())->from('{{%tool_definition}}')->where(['catalog_entry_id' => $entry->id])->exists()) {
+                $issues[] = 'Не заполнена группа инструмента.';
             }
             if ($kind === 'weapon' && !($data['item']['weapon'] ?? null)) {
                 $issues[] = 'Не заполнены урон, свойства и мастерство оружия.';
@@ -47,6 +48,11 @@ final class ArchiveReadiness
                 if ((new Query())->from('{{%' . $table . '}}')->where(['background_entry_id' => $entry->id])->count() != $count) {
                     $issues[] = 'Не заполнены обязательные свойства предыстории: ' . $table . '.';
                 }
+            }
+            $equipmentSource = (new Query())->select('source_text')->from('{{%background_starting_equipment}}')
+                ->where(['background_entry_id' => $entry->id])->scalar();
+            if ($equipmentSource !== false && $equipmentSource !== null && trim((string) $equipmentSource) === '') {
+                $issues[] = 'Точный текст стартового комплекта предыстории пуст.';
             }
         }
         if ($entry->type === 'class') {
@@ -72,8 +78,22 @@ final class ArchiveReadiness
             }
         }
         foreach (CatalogEntry::find()->where(['id' => array_unique($ids), 'is_published' => false])->all() as $target) {
-            $issues[] = 'Связанная запись не опубликована: ' . $target->title . '.';
+            $warnings[] = 'Связанная запись пока остаётся черновиком: ' . $target->title . '.';
         }
-        return ['id' => $entry->id, 'title' => $entry->title, 'type' => $entry->type, 'complete' => !$issues, 'issues' => array_values(array_unique($issues))];
+        $contentIssues = [];
+        if (trim((string) $entry->body) === '') {
+            $contentIssues[] = 'Не добавлено описание для публикации записи.';
+        }
+
+        return [
+            'id' => $entry->id,
+            'title' => $entry->title,
+            'type' => $entry->type,
+            'complete' => !$issues,
+            'issues' => array_values(array_unique($issues)),
+            'content_complete' => !$contentIssues,
+            'content_issues' => $contentIssues,
+            'warnings' => array_values(array_unique($warnings)),
+        ];
     }
 }

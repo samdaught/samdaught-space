@@ -16,7 +16,7 @@ class Rulebook
     public const FEATURES = ['general', 'class_feature', 'invocation', 'metamagic', 'maneuver', 'item_plan'];
     public static function empty(): array
     {
-        return ['parent_entry_id' => null, 'variant_required' => false, 'subclass_level' => 3, 'selection_level' => 1, 'feature_kind' => 'general', 'repeatable' => false, 'distinct_choices' => [], 'prerequisites' => RuleMath::condition(), 'effects' => [], 'choices' => [], 'casting_choice_code' => null, 'casting_ability_code' => null, 'spell_list_class_ids' => [], 'unlocks' => [], 'progression' => [], 'spell_grants' => [], 'spell_picks' => [], 'resources' => [], 'item' => null, 'sources' => [], 'ready' => false];
+        return ['parent_entry_id' => null, 'variant_required' => false, 'subclass_level' => 3, 'selection_level' => 1, 'feature_kind' => 'general', 'repeatable' => false, 'distinct_choices' => [], 'prerequisites' => RuleMath::condition(), 'effects' => [], 'choices' => [], 'casting_choice_code' => null, 'casting_ability_code' => null, 'spell_list_class_ids' => [], 'unlocks' => [], 'progression' => [], 'spell_grants' => [], 'spell_picks' => [], 'resources' => [], 'item' => null];
     }
     public function read(int $id): array
     {
@@ -31,7 +31,6 @@ class Rulebook
                 'casting_ability_code' => $rules['casting_ability_code'],
                 'casting_choice_code' => $rules['casting_choice_code'],
                 'prerequisites' => $this->json($rules['prerequisites'], RuleMath::condition()),
-                'ready' => (bool) $rules['ready'],
             ]);
         }
 
@@ -135,7 +134,6 @@ class Rulebook
             $armor = (new Query())->select(['category', 'strength_min', 'stealth_disadvantage'])->from('{{%armor_definition}}')->where(['catalog_entry_id' => $id])->one();
             if ($armor) $data['item']['armor'] = ['category' => $armor['category'], 'strength_min' => (int) $armor['strength_min'], 'stealth_disadvantage' => (bool) $armor['stealth_disadvantage']];
         }
-        $data['sources'] = (new Query())->from('{{%entry_source_reference}}')->where(['entry_id' => $id])->orderBy(['source_id' => SORT_ASC, 'page' => SORT_ASC])->all();
         return $data;
     }
     public function options(?RuleProfile $profile): array
@@ -148,7 +146,7 @@ class Rulebook
                 }
             }
         }
-        return ['entries' => $entries, 'vocabulary' => (new Query())->from('{{%rule_vocabulary}}')->orderBy(['kind' => SORT_ASC, 'title' => SORT_ASC])->all(), 'sources' => (new Query())->select(['id', 'title'])->from('{{%content_source}}')->orderBy('title')->all(), 'targets' => self::TARGETS, 'recovery' => self::RECOVERY, 'features' => self::FEATURES];
+        return ['entries' => $entries, 'vocabulary' => (new Query())->from('{{%rule_vocabulary}}')->orderBy(['kind' => SORT_ASC, 'title' => SORT_ASC])->all(), 'targets' => self::TARGETS, 'recovery' => self::RECOVERY, 'features' => self::FEATURES];
     }
     public function validate(CatalogEntry $entry, $input, ?string $pendingItemKind = null): array
     {
@@ -162,8 +160,8 @@ class Rulebook
         if (!is_bool($data['variant_required'])) {
             throw new \InvalidArgumentException('Укажите обязательность варианта вида.');
         }
-        if (!in_array($data['feature_kind'], self::FEATURES, true) || !is_bool($data['repeatable']) || !is_bool($data['ready'])) {
-            throw new \InvalidArgumentException('Проверьте категорию, повторяемость и готовность правила.');
+        if (!in_array($data['feature_kind'], self::FEATURES, true) || !is_bool($data['repeatable'])) {
+            throw new \InvalidArgumentException('Проверьте категорию и повторяемость особенности.');
         }
         if (in_array($entry->type, ['subclass', 'species_variant'], true)) {
             $type = $entry->type === 'subclass' ? 'class' : 'species';
@@ -175,7 +173,7 @@ class Rulebook
         } elseif ($data['parent_entry_id'] !== null) {
             throw new \InvalidArgumentException('Родитель задаётся только у подкласса или варианта вида.');
         }
-        foreach (['effects', 'choices', 'unlocks', 'progression', 'spell_grants', 'spell_picks', 'resources', 'sources', 'distinct_choices'] as $key) {
+        foreach (['effects', 'choices', 'unlocks', 'progression', 'spell_grants', 'spell_picks', 'resources', 'distinct_choices'] as $key) {
             RuleMath::list($data[$key], $key === 'unlocks' ? 1000 : 100);
         }
         RuleMath::validateCondition($data['prerequisites']);
@@ -378,27 +376,6 @@ class Rulebook
                 $this->formulaReferences($data['item']['magic']['charges'], $entry, $refs);
             }
         }
-        $sourceKeys = [];
-        foreach ($data['sources'] as $source) {
-            RuleMath::keys($source, ['source_id', 'page', 'url', 'revision']);
-            RuleMath::number($source['source_id'], 1, 2147483647);
-            if (!(new Query())->from('{{%content_source}}')->where(['id' => $source['source_id']])->exists()) {
-                throw new \InvalidArgumentException('Источник не найден.');
-            }
-            RuleMath::text($source['page'], 64, true);
-            RuleMath::text($source['url'], 1000, true);
-            RuleMath::text($source['revision'], 120, true);
-            if ($source['url'] !== '' && !preg_match('~^https?://~i', $source['url'])) {
-                throw new \InvalidArgumentException('Ссылка источника должна начинаться с http или https.');
-            }
-            $sourceKeys[] = $source['source_id'] . ':' . $source['page'];
-        }
-        if (count($sourceKeys) !== count(array_unique($sourceKeys))) {
-            throw new \InvalidArgumentException('Ссылка на страницу источника повторяется.');
-        }
-        if ($data['ready'] && $entry->type === 'class' && count($levels) !== 20) {
-            throw new \InvalidArgumentException('Для готового класса заполните все 20 уровней.');
-        }
         $this->checkCycles($entry, $data['unlocks']);
         return $data;
     }
@@ -481,7 +458,6 @@ class Rulebook
             'casting_ability_code' => $data['casting_ability_code'],
             'casting_choice_code' => $data['casting_choice_code'],
             'prerequisites' => new JsonExpression($data['prerequisites']),
-            'ready' => $data['ready'],
         ])->execute();
         foreach (['entry_rule_effect', 'entry_rule_distinct_choice', 'entry_rule_choice_value', 'entry_rule_choice', 'entry_spell_list_class', 'entry_spell_pick_class', 'entry_spell_pick'] as $table) {
             $db->createCommand()->delete('{{%' . $table . '}}', ['source_entry_id' => $entry->id])->execute();
@@ -582,10 +558,6 @@ class Rulebook
             if ($data['item']['armor'] ?? null) {
                 $db->createCommand()->update('{{%armor_definition}}', $data['item']['armor'], ['catalog_entry_id' => $entry->id])->execute();
             }
-        }
-        $db->createCommand()->delete('{{%entry_source_reference}}', ['entry_id' => $entry->id])->execute();
-        foreach ($data['sources'] as $source) {
-            $db->createCommand()->insert('{{%entry_source_reference}}', ['entry_id' => $entry->id] + $source)->execute();
         }
         $refs = $data['spell_list_class_ids'];
         $this->conditionReferences($data['prerequisites'], $entry, $refs);
